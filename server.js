@@ -19,10 +19,6 @@
 require('dotenv').config();
 
 const path = require("path");
-
-// Serve static plugin files (e.g. plugin.json)
-app.use(express.static(path.join(__dirname, "public")));
-
 const express = require('express');
 const bodyParser = require('body-parser');
 const helmet = require('helmet');
@@ -31,7 +27,7 @@ const { Profanity } = require('@2toad/profanity');
 const Sentiment = require('sentiment');
 const fetch = require('node-fetch');
 
-const app = express();
+const app = express(); // <-- FIXED: app is now declared before use
 const PORT = process.env.PORT || 8080;
 const profanity = new Profanity();
 const sentiment = new Sentiment();
@@ -47,6 +43,9 @@ const limiter = rateLimit({
     legacyHeaders: false,
 });
 app.use(limiter);
+
+// Serve static plugin files (e.g. plugin.json)
+app.use(express.static(path.join(__dirname, "public")));
 
 // --- ⬇️ CONFIGURATION (Secrets from env, plugin config editable via API) ⬇️ ---
 
