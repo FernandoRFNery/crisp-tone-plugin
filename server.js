@@ -18,6 +18,11 @@
 
 require('dotenv').config();
 
+const path = require("path");
+
+// Serve static plugin files (e.g. plugin.json)
+app.use(express.static(path.join(__dirname, "public")));
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const helmet = require('helmet');
