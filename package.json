@@ -1,0 +1,19 @@
+{
+  "name": "crisp-tone-plugin",
+  "version": "1.0.0",
+  "description": "Tone and Profanity Detector for Crisp",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@2toad/profanity": "^2.0.2",
+    "body-parser": "^1.20.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.0.0",
+    "node-fetch": "^2.6.9",
+    "sentiment": "^5.0.2",
+    "express-rate-limit": "^7.0.0"
+  }
+}
