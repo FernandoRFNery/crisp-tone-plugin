@@ -6,17 +6,21 @@
  * cost-free toxicity detection.
  */
 
-require('dotenv').config();
+// Use import for all modules
+import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import express from 'express';
+import bodyParser from 'body-parser';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import fetch from 'node-fetch';
+import { pipeline } from '@xenova/transformers';
 
-const path = require("path");
-const fs = require('fs');
-const express = require('express');
-const bodyParser = require('body-parser');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const fetch = require('node-fetch');
-// NEW: Import the pipeline function for loading the AI model
-const { pipeline } = await import('@xenova/transformers');
+// Recreate __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 
 // --- NEW: Singleton Class to manage the AI model ---
@@ -30,6 +34,7 @@ class ToxicityPipeline {
         if (this.instance === null) {
             console.log('Loading toxicity detection model...');
             const start = Date.now();
+            // The pipeline function is now imported, so we don't need to await the import itself.
             this.instance = pipeline(this.task, this.model, { progress_callback });
             this.instance.then(() => {
                  console.log(`Model loaded successfully in ${(Date.now() - start) / 1000}s`);
