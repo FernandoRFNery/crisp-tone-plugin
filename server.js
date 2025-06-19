@@ -33,8 +33,6 @@ app.set('trust proxy', 1);
 
 // Configure helmet to allow Crisp's domain to embed content
 app.use(helmet({
-    // Removed frameguard: { action: 'ALLOW-FROM', ... } as it's deprecated.
-    // Using frameAncestors in contentSecurityPolicy instead.
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
@@ -60,13 +58,21 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Serve plugin.json with correct content-type (Crisp compatibility)
+// This serves the manifest (plugin.json) itself, not the settings UI.
 app.get("/plugin.json", (req, res) => {
     res.type("application/json");
     res.sendFile(path.join(__dirname, "public", "plugin.json"));
 });
 
-// Serve static plugin files (e.g. plugin.json)
+// NEW: Serve the HTML settings page
+app.get("/settings", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "settings.html"));
+});
+
+// Serve static plugin files (e.g. any other assets in public folder)
+// Ensure this line is after the specific routes for /plugin.json and /settings
 app.use(express.static(path.join(__dirname, "public")));
+
 
 // --- ⬇️ CONFIGURATION (Secrets from env, plugin config editable via API) ⬇️ ---
 
