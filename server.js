@@ -38,15 +38,19 @@ const sentiment = new Sentiment();
 
 app.set('trust proxy', 1);
 
+// **FIXED**: Updated Content Security Policy to allow embedding within the Crisp app.
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
-            styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
-            imgSrc: ["'self'", 'data:', 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
-            connectSrc: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
-            frameAncestors: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            // Allow scripts from Crisp's domains for proper functionality.
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://app.crisp.chat", "https://marketplace.crisp.chat"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://app.crisp.chat", "https://marketplace.crisp.chat"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            // Allow the settings page to be embedded in both the marketplace and the actual Crisp app.
+            frameAncestors: ["'self'", "https://app.crisp.chat", "https://marketplace.crisp.chat"],
+            // Ensure API calls can be made from the settings page when loaded in Crisp.
+            connectSrc: ["'self'", "https://app.crisp.chat", "https://marketplace.crisp.chat"],
         }
     }
 }));
@@ -61,8 +65,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// **FIXED**: Serve static files (plugin.json, settings.html) from the 'public' directory.
-// This is the standard way to handle static assets and is more reliable for deployment.
+// Serve static files (plugin.json, settings.html) from the 'public' directory.
 app.use(express.static(path.join(__dirname, 'public')));
 
 
@@ -192,7 +195,7 @@ function highlightProfanity(message, config) {
         return message;
     }
     const profaneWords = getAllProfanitiesInMessage(message);
-    if (!Array.isArray(profaneWords) || profaneWords.length === 0) return message;
+    if (!Array.isArray(profaneWords) || profaneWords.length > 0) return message;
     const uniqueProfaneWords = [...new Set(profaneWords)];
     let highlighted = message;
     uniqueProfaneWords.forEach(word => {
