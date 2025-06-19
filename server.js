@@ -3,17 +3,14 @@
  * --------------------------------------------------------------
  * This version exposes a simple plugin configuration API for Crisp plugin UI integration.
  * Admins can GET/POST plugin config (tag/segment and negative threshold) via /plugin-config.
- * 
- * Usage:
- *   - All secrets (CRISP_IDENTIFIER, CRISP_KEY, SLACK_WEBHOOK_URL, CRISP_WEBSITE_ID) remain in .env.
- *   - Tag (segment) and negative threshold are editable via the plugin config API.
- *   - The plugin config is stored in-memory by default, but can be extended to persist (e.g., DB, file).
- * 
- * Endpoints:
- *   - GET  /plugin-config   (returns current config)
- *   - POST /plugin-config   (accepts { tagToApply, negativeThreshold })
- *   - POST /webhook         (Crisp webhook, unchanged)
- *   - GET  /health          (health check)
+ * * Usage:
+ * - All secrets (CRISP_IDENTIFIER, CRISP_KEY, SLACK_WEBHOOK_URL, CRISP_WEBSITE_ID) remain in .env.
+ * - Tag (segment) and negative threshold are editable via the plugin config API.
+ * - The plugin config is stored in-memory by default, but can be extended to persist (e.g., DB, file).
+ * * Endpoints:
+ * - GET  /plugin-config   (returns current config)
+ * - POST /plugin-config   (accepts { tagToApply, negativeThreshold })\n * - POST /webhook         (Crisp webhook, unchanged)
+ * - GET  /health          (health check)
  */
 
 require('dotenv').config();
@@ -21,19 +18,40 @@ require('dotenv').config();
 const path = require("path");
 const express = require('express');
 const bodyParser = require('body-parser');
-const helmet = require('helmet');
+const helmet = require('helmet'); // Import helmet
 const rateLimit = require('express-rate-limit');
 const { Profanity } = require('@2toad/profanity');
 const Sentiment = require('sentiment');
 const fetch = require('node-fetch');
 
-const app = express(); // <-- FIXED: app is now declared before use
+const app = express();
 const PORT = process.env.PORT || 8080;
 const profanity = new Profanity();
 const sentiment = new Sentiment();
 
 app.set('trust proxy', 1);
-app.use(helmet());
+
+// Configure helmet to allow Crisp's domain to embed content
+app.use(helmet({
+    frameguard: {
+        action: 'ALLOW-FROM',
+        domain: 'https://app.crisp.chat' // Allow embedding from Crisp's domain
+    },
+    // If you encounter further issues related to CSP, you might need to adjust it.
+    // For now, only frameguard is targeted.
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'", 'https://app.crisp.chat'],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat'],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat'],
+            imgSrc: ["'self'", 'data:', 'https://app.crisp.chat'],
+            connectSrc: ["'self'", 'https://app.crisp.chat'],
+            frameAncestors: ["'self'", 'https://app.crisp.chat'],
+            // Add other directives as needed by your application
+        }
+    }
+}));
+
 app.use(bodyParser.json());
 
 const limiter = rateLimit({
@@ -43,6 +61,7 @@ const limiter = rateLimit({
     legacyHeaders: false,
 });
 app.use(limiter);
+
 // Serve plugin.json with correct content-type (Crisp compatibility)
 app.get("/plugin.json", (req, res) => {
     res.type("application/json");
