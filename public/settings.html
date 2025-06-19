@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crisp Plugin Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc; /* Tailwind gray-100 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 100%;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568; /* Tailwind gray-700 */
+        }
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 16px;
+            border: 1px solid #cbd5e0; /* Tailwind gray-300 */
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4c51bf; /* Tailwind indigo-700 */
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.2s ease-in-out;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #3b3a7f; /* Darker indigo */
+        }
+        .message {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .message.success {
+            background-color: #d1fae5; /* Tailwind green-100 */
+            color: #065f46; /* Tailwind green-800 */
+        }
+        .message.error {
+            background-color: #fee2e2; /* Tailwind red-100 */
+            color: #991b1b; /* Tailwind red-800 */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Plugin Settings</h2>
+        <form id="settingsForm">
+            <div class="mb-4">
+                <label for="tagToApply">Segment Tag to Apply:</label>
+                <input type="text" id="tagToApply" name="tagToApply" placeholder="e.g. profanity-alert" required class="rounded-lg">
+            </div>
+            <div class="mb-4">
+                <label for="negativeThreshold">Negative Sentiment Threshold:</label>
+                <input type="number" id="negativeThreshold" name="negativeThreshold" step="0.1" min="-5" max="0" placeholder="-0.5" required class="rounded-lg">
+            </div>
+            <button type="submit" class="rounded-lg">Save Settings</button>
+        </form>
+        <div id="message" class="message hidden"></div>
+    </div>
+
+    <script>
+        const settingsForm = document.getElementById('settingsForm');
+        const messageDiv = document.getElementById('message');
+        const tagToApplyInput = document.getElementById('tagToApply');
+        const negativeThresholdInput = document.getElementById('negativeThreshold');
+
+        // Define the base URL for your Render app
+        const RENDER_BASE_URL = 'https://crisp-tone-plugin.onrender.com'; // IMPORTANT: Replace with your actual Render URL
+
+        // Function to display messages
+        function showMessage(msg, type) {
+            messageDiv.textContent = msg;
+            messageDiv.className = `message ${type}`;
+            messageDiv.classList.remove('hidden');
+        }
+
+        // Load settings when the page loads
+        async function loadSettings() {
+            try {
+                // Use absolute URL for fetch call
+                const response = await fetch(`${RENDER_BASE_URL}/plugin-config`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const settings = await response.json();
+                tagToApplyInput.value = settings.tagToApply || '';
+                negativeThresholdInput.value = settings.negativeThreshold !== undefined ? settings.negativeThreshold : '';
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                showMessage('Failed to load settings. Please ensure the backend is running.', 'error');
+            }
+        }
+
+        // Save settings when the form is submitted
+        settingsForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            messageDiv.classList.add('hidden'); // Hide previous messages
+
+            const tagToApply = tagToApplyInput.value.trim();
+            const negativeThreshold = parseFloat(negativeThresholdInput.value);
+
+            if (!tagToApply) {
+                showMessage('Segment Tag cannot be empty.', 'error');
+                return;
+            }
+            if (isNaN(negativeThreshold)) {
+                showMessage('Negative Sentiment Threshold must be a number.', 'error');
+                return;
+            }
+
+            try {
+                // Use absolute URL for fetch call
+                const response = await fetch(`${RENDER_BASE_URL}/plugin-config`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ tagToApply, negativeThreshold })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.ok) {
+                    showMessage('Settings saved successfully!', 'success');
+                } else {
+                    const errorMessage = result.errors ? result.errors.join(', ') : (result.error || 'Unknown error');
+                    showMessage(`Failed to save settings: ${errorMessage}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                showMessage('Failed to save settings. Please check your network connection.', 'error');
+            }
+        });
+
+        // Initialize settings load on page load
+        loadSettings();
+    </script>
+</body>
+</html>
