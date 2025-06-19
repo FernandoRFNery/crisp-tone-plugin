@@ -5,139 +5,223 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crisp Plugin Settings</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: 'Inter', sans-serif;
-            background: #f8fafc;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 24px 16px;
+            margin: 0;
+        }
+        
+        .main-container {
+            max-width: 480px;
+            margin: 0 auto;
         }
         
         .card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e5e7eb;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 32px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 35px 70px -12px rgba(0, 0, 0, 0.35);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0 0 8px 0;
+        }
+        
+        .header p {
+            font-size: 16px;
+            color: #64748b;
+            font-weight: 400;
+            margin: 0;
         }
         
         .input-field {
             width: 100%;
-            padding: 12px 16px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: all 0.2s ease;
-            background: white;
+            padding: 16px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 400;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
         }
         
         .input-field:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            background: rgba(255, 255, 255, 0.95);
+            transform: translateY(-1px);
         }
         
         .input-field::placeholder {
-            color: #9ca3af;
+            color: #94a3b8;
+            font-weight: 400;
         }
         
         .label {
             display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: #374151;
-            margin-bottom: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 8px;
         }
         
         .input-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
         
         .toggle-switch {
             position: relative;
-            width: 44px;
-            height: 24px;
-            background: #e5e7eb;
-            border-radius: 12px;
-            transition: background-color 0.2s ease;
+            width: 52px;
+            height: 28px;
+            background: #cbd5e1;
+            border-radius: 14px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             cursor: pointer;
             flex-shrink: 0;
         }
         
         .toggle-switch.active {
-            background: #3b82f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         
         .toggle-switch::after {
             content: '';
             position: absolute;
-            width: 20px;
-            height: 20px;
+            width: 24px;
+            height: 24px;
             background: white;
             border-radius: 50%;
             top: 2px;
             left: 2px;
-            transition: transform 0.2s ease;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
         .toggle-switch.active::after {
-            transform: translateX(20px);
+            transform: translateX(24px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
         }
         
         .button-primary {
-            background: #3b82f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 12px 24px;
+            padding: 16px 32px;
             border: none;
-            border-radius: 8px;
-            font-weight: 500;
-            font-size: 14px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 16px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .button-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
         }
         
         .button-primary:hover {
-            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .button-primary:hover::before {
+            left: 100%;
+        }
+        
+        .button-primary:active {
+            transform: translateY(0);
         }
         
         .button-primary:disabled {
-            background: #9ca3af;
+            background: #94a3b8;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .button-primary:disabled::before {
+            display: none;
         }
         
         .toggle-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px;
-            background: #f9fafb;
-            border-radius: 8px;
-            margin-bottom: 16px;
+            padding: 20px;
+            background: rgba(248, 250, 252, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(226, 232, 240, 0.5);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .toggle-row:hover {
+            background: rgba(248, 250, 252, 0.95);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
         
         .toggle-content h3 {
-            font-size: 14px;
-            font-weight: 500;
-            color: #111827;
-            margin: 0 0 2px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin: 0 0 4px 0;
         }
         
         .toggle-content p {
-            font-size: 13px;
-            color: #6b7280;
+            font-size: 14px;
+            color: #64748b;
             margin: 0;
         }
         
         .message {
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-top: 16px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 500;
+            margin-top: 20px;
             opacity: 0;
             transform: translateY(-10px);
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         .message.show {
@@ -146,44 +230,45 @@
         }
         
         .message.success {
-            background: #f0fdf4;
-            color: #166534;
-            border: 1px solid #bbf7d0;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
         }
         
         .message.error {
-            background: #fef2f2;
-            color: #dc2626;
-            border: 1px solid #fecaca;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
         }
         
         .info-icon {
-            width: 16px;
-            height: 16px;
-            color: #6b7280;
+            width: 18px;
+            height: 18px;
+            color: #64748b;
             cursor: pointer;
-            transition: color 0.2s ease;
+            transition: all 0.3s ease;
             flex-shrink: 0;
         }
         
         .info-icon:hover {
-            color: #3b82f6;
+            color: #667eea;
+            transform: scale(1.1);
         }
         
         .sentiment-popup {
             position: absolute;
-            top: -8px;
-            right: 24px;
-            width: 280px;
+            top: -12px;
+            right: 28px;
+            width: 320px;
             background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 16px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
             opacity: 0;
             visibility: hidden;
-            transform: translateY(4px);
-            transition: all 0.2s ease;
+            transform: translateY(8px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 50;
         }
         
@@ -195,82 +280,175 @@
         
         .popup-arrow {
             position: absolute;
-            top: 16px;
+            top: 20px;
             left: -6px;
             width: 12px;
             height: 12px;
             background: white;
-            border-left: 1px solid #e5e7eb;
-            border-bottom: 1px solid #e5e7eb;
+            border-left: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
             transform: rotate(45deg);
         }
         
         .popup-title {
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 600;
-            color: #111827;
-            margin-bottom: 8px;
-        }
-        
-        .popup-text {
-            font-size: 13px;
-            color: #4b5563;
-            line-height: 1.5;
+            color: #1e293b;
             margin-bottom: 12px;
         }
         
+        .popup-text {
+            font-size: 14px;
+            color: #475569;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        
         .popup-examples {
-            background: #f8fafc;
-            border-radius: 6px;
-            padding: 12px;
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border-radius: 8px;
+            padding: 16px;
             border: 1px solid #e2e8f0;
         }
         
         .popup-examples-title {
-            font-size: 12px;
-            font-weight: 500;
-            color: #374151;
-            margin-bottom: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 12px;
         }
         
         .popup-examples-list {
-            font-size: 12px;
-            color: #4b5563;
-            line-height: 1.4;
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.5;
         }
         
         .popup-footer {
-            font-size: 12px;
-            color: #6b7280;
-            margin-top: 8px;
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 12px;
+            font-style: italic;
         }
         
         .section-title {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 600;
-            color: #111827;
-            margin-bottom: 16px;
+            color: #1e293b;
+            margin-bottom: 20px;
         }
         
         .hint-text {
             font-size: 13px;
-            color: #6b7280;
-            margin-top: 4px;
+            color: #64748b;
+            margin-top: 6px;
+            font-weight: 400;
         }
         
         .divider {
             height: 1px;
-            background: #e5e7eb;
-            margin: 24px 0;
+            background: linear-gradient(90deg, transparent, #e2e8f0, transparent);
+            margin: 32px 0;
+        }
+        
+        .info-icon-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+        
+        .label-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        /* Loading animation */
+        .loading-dots {
+            display: inline-block;
+        }
+        
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+        
+        /* Responsive design */
+        @media (max-width: 640px) {
+            body {
+                padding: 16px 12px;
+            }
+            
+            .card {
+                padding: 24px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .sentiment-popup {
+                width: 280px;
+                right: 16px;
+            }
+        }
+        
+        /* Focus visible improvements */
+        .toggle-switch:focus-visible {
+            outline: 2px solid #667eea;
+            outline-offset: 2px;
+        }
+        
+        /* Smooth transitions for dynamic content */
+        .input-group[style*="display: none"] {
+            animation: slideUp 0.3s ease-out;
+        }
+        
+        .input-group:not([style*="display: none"]) {
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 1;
+                max-height: 100px;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                max-height: 0;
+                transform: translateY(-10px);
+            }
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                max-height: 100px;
+                transform: translateY(0);
+            }
         }
     </style>
 </head>
 <body>
-    <div class="max-w-md mx-auto">
-        <div class="card p-6">
-            <div class="text-center mb-6">
-                <h1 class="text-xl font-semibold text-gray-900 mb-1">Plugin Settings</h1>
-                <p class="text-sm text-gray-600">Configure your sentiment monitoring preferences</p>
+    <div class="main-container">
+        <div class="card">
+            <div class="header">
+                <h1>Plugin Settings</h1>
+                <p>Configure your sentiment monitoring preferences</p>
             </div>
 
             <form id="settingsForm">
@@ -281,8 +459,8 @@
                 </div>
                 
                 <div class="input-group">
-                    <div class="flex items-center gap-2 mb-1">
-                        <label for="negativeThreshold" class="label mb-0">Sentiment Threshold</label>
+                    <div class="label-row">
+                        <label for="negativeThreshold" class="label">Sentiment Threshold</label>
                         <div class="info-icon-wrapper" id="sentimentInfoIcon">
                             <svg class="info-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -323,7 +501,7 @@
                         <h3>Slack Alerts</h3>
                         <p>Send notifications to your workspace</p>
                     </div>
-                    <div class="toggle-switch" id="slackToggle">
+                    <div class="toggle-switch" id="slackToggle" tabindex="0" role="switch" aria-checked="false">
                         <input type="checkbox" id="slackEnabled" name="slackEnabled" style="display: none;">
                     </div>
                 </div>
@@ -339,7 +517,7 @@
                         <h3>Highlight Profanity</h3>
                         <p>Visually emphasize problematic content</p>
                     </div>
-                    <div class="toggle-switch" id="highlightToggle">
+                    <div class="toggle-switch" id="highlightToggle" tabindex="0" role="switch" aria-checked="false">
                         <input type="checkbox" id="highlightProfanity" name="highlightProfanity" style="display: none;">
                     </div>
                 </div>
@@ -378,55 +556,95 @@
             // Sentiment info popup functionality
             let popupTimeout;
             
-            sentimentInfoIcon.addEventListener('mouseenter', () => {
+            function showPopup() {
                 clearTimeout(popupTimeout);
                 sentimentPopup.classList.add('show');
-            });
+            }
             
-            sentimentInfoIcon.addEventListener('mouseleave', () => {
+            function hidePopup() {
                 popupTimeout = setTimeout(() => {
                     sentimentPopup.classList.remove('show');
-                }, 150);
-            });
+                }, 200);
+            }
+            
+            sentimentInfoIcon.addEventListener('mouseenter', showPopup);
+            sentimentInfoIcon.addEventListener('mouseleave', hidePopup);
+            sentimentInfoIcon.addEventListener('focus', showPopup);
+            sentimentInfoIcon.addEventListener('blur', hidePopup);
             
             // Keep popup open when hovering over it
             sentimentPopup.addEventListener('mouseenter', () => {
                 clearTimeout(popupTimeout);
             });
             
-            sentimentPopup.addEventListener('mouseleave', () => {
-                sentimentPopup.classList.remove('show');
-            });
+            sentimentPopup.addEventListener('mouseleave', hidePopup);
 
-            // Toggle switch functionality
+            // Enhanced toggle switch functionality with keyboard support
             function setupToggle(toggle, checkbox, relatedGroup = null) {
-                toggle.addEventListener('click', () => {
+                function toggleState() {
                     checkbox.checked = !checkbox.checked;
+                    updateToggleState(toggle, checkbox, relatedGroup);
+                }
+                
+                function updateToggleState(toggle, checkbox, relatedGroup) {
                     toggle.classList.toggle('active', checkbox.checked);
+                    toggle.setAttribute('aria-checked', checkbox.checked);
                     
                     if (relatedGroup) {
-                        relatedGroup.style.display = checkbox.checked ? 'block' : 'none';
+                        if (checkbox.checked) {
+                            relatedGroup.style.display = 'block';
+                            // Focus the input when showing
+                            const input = relatedGroup.querySelector('input');
+                            if (input) {
+                                setTimeout(() => input.focus(), 300);
+                            }
+                        } else {
+                            relatedGroup.style.display = 'none';
+                        }
+                    }
+                }
+                
+                toggle.addEventListener('click', toggleState);
+                toggle.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleState();
                     }
                 });
+                
+                // Initialize state
+                updateToggleState(toggle, checkbox, relatedGroup);
             }
 
             setupToggle(slackToggle, slackEnabledInput, slackUrlGroup);
             setupToggle(highlightToggle, highlightProfanityInput);
 
-            // Function to display messages with animation
+            // Enhanced message display with better animations
             function showMessage(msg, type) {
                 messageDiv.textContent = msg;
                 messageDiv.className = `message ${type}`;
-                // Trigger animation
-                setTimeout(() => {
-                    messageDiv.classList.add('show');
-                }, 50);
                 
-                // Auto-hide success messages
+                // Ensure element is visible before adding show class
+                requestAnimationFrame(() => {
+                    messageDiv.classList.add('show');
+                });
+                
+                // Auto-hide success messages with fade out
                 if (type === 'success') {
                     setTimeout(() => {
                         messageDiv.classList.remove('show');
-                    }, 3000);
+                    }, 4000);
+                }
+            }
+
+            // Enhanced loading state management
+            function setLoadingState(button, isLoading) {
+                if (isLoading) {
+                    button.disabled = true;
+                    button.innerHTML = '<span class="loading-dots">Saving</span>';
+                } else {
+                    button.disabled = false;
+                    button.textContent = 'Save Settings';
                 }
             }
 
@@ -436,28 +654,34 @@
                     showMessage('Error: website_id is missing from the URL. Cannot load settings.', 'error');
                     return;
                 }
+                
                 try {
                     const response = await fetch(`${API_BASE_URL}/plugin-config?website_id=${websiteId}`, {
                         method: 'GET',
                         headers: { 'Content-Type': 'application/json' }
                     });
+                    
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
+                    
                     const settings = await response.json();
 
+                    // Populate form fields
                     tagToApplyInput.value = settings.tagToApply || '';
                     negativeThresholdInput.value = settings.negativeThreshold !== undefined ? settings.negativeThreshold : '';
                     
                     // Update toggle switches
                     slackEnabledInput.checked = settings.slackEnabled || false;
                     slackToggle.classList.toggle('active', slackEnabledInput.checked);
+                    slackToggle.setAttribute('aria-checked', slackEnabledInput.checked);
                     slackUrlGroup.style.display = slackEnabledInput.checked ? 'block' : 'none';
                     
                     slackWebhookUrlInput.value = settings.slackWebhookUrl || '';
                     
                     highlightProfanityInput.checked = settings.highlightProfanity || false;
                     highlightToggle.classList.toggle('active', highlightProfanityInput.checked);
+                    highlightToggle.setAttribute('aria-checked', highlightProfanityInput.checked);
 
                 } catch (error) {
                     console.error('Error loading settings:', error);
@@ -468,22 +692,37 @@
             // Save settings when the form is submitted
             settingsForm.addEventListener('submit', async (event) => {
                 event.preventDefault();
-                messageDiv.classList.remove('show'); // Hide previous messages
+                
+                // Clear previous messages
+                messageDiv.classList.remove('show');
 
                 if (!websiteId) {
                     showMessage('Error: website_id is missing. Cannot save settings.', 'error');
                     return;
                 }
 
-                // Add loading state to button
                 const submitButton = event.target.querySelector('button[type="submit"]');
-                const originalText = submitButton.textContent;
-                submitButton.textContent = 'Saving...';
-                submitButton.disabled = true;
+                setLoadingState(submitButton, true);
+
+                // Validate inputs
+                const threshold = parseFloat(negativeThresholdInput.value);
+                if (isNaN(threshold) || threshold > 0 || threshold < -5) {
+                    showMessage('Please enter a valid sentiment threshold between -5.0 and 0.', 'error');
+                    setLoadingState(submitButton, false);
+                    negativeThresholdInput.focus();
+                    return;
+                }
+
+                if (slackEnabledInput.checked && !slackWebhookUrlInput.value.trim()) {
+                    showMessage('Please enter a Slack webhook URL or disable Slack alerts.', 'error');
+                    setLoadingState(submitButton, false);
+                    slackWebhookUrlInput.focus();
+                    return;
+                }
 
                 const payload = {
                     tagToApply: tagToApplyInput.value.trim(),
-                    negativeThreshold: parseFloat(negativeThresholdInput.value),
+                    negativeThreshold: threshold,
                     slackEnabled: slackEnabledInput.checked,
                     slackWebhookUrl: slackWebhookUrlInput.value.trim(),
                     highlightProfanity: highlightProfanityInput.checked,
@@ -508,9 +747,17 @@
                     console.error('Error saving settings:', error);
                     showMessage('Failed to save settings. Please check your network connection.', 'error');
                 } finally {
-                    // Restore button state
-                    submitButton.textContent = originalText;
-                    submitButton.disabled = false;
+                    setLoadingState(submitButton, false);
+                }
+            });
+
+            // Input validation feedback
+            negativeThresholdInput.addEventListener('input', () => {
+                const value = parseFloat(negativeThresholdInput.value);
+                if (!isNaN(value) && (value > 0 || value < -5)) {
+                    negativeThresholdInput.style.borderColor = '#ef4444';
+                } else {
+                    negativeThresholdInput.style.borderColor = '#e2e8f0';
                 }
             });
 
