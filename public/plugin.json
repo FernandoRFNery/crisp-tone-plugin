@@ -7,6 +7,6 @@
   "api_url": "https://crisp-tone-plugin.onrender.com",
   "permissions": ["plugin"],
   "components": {
-    "settings": "https://crisp-tone-plugin.onrender.com/settings.html"
+    "settings": "https://crisp-tone-plugin.onrender.com/settings"
   }
 }
