@@ -225,8 +225,8 @@ app.get("/plugin.json", (req, res) => {
     res.sendFile(path.join(__dirname, "plugin.json"));
 });
 
-// Serve the HTML settings page (if requested directly, though typically handled by static middleware)
-app.get("/settings.html", (req, res) => {
+// Serve the HTML settings page
+app.get("/settings", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "settings.html"));
 });
 
