@@ -10,11 +10,6 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f7fafc; /* Tailwind gray-100 */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
             padding: 20px;
         }
         .container {
@@ -24,6 +19,7 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             max-width: 500px;
             width: 100%;
+            margin: auto;
         }
         label {
             display: block;
@@ -64,21 +60,24 @@
             width: 100%;
         }
         button:hover {
-            background-color: #3b3a7f; /* Darker indigo */
+            background-color: #3b3a7f;
         }
         .message {
             margin-top: 20px;
             padding: 12px;
             border-radius: 8px;
             font-weight: 600;
+            display: none; /* Hidden by default */
         }
         .message.success {
             background-color: #d1fae5; /* Tailwind green-100 */
             color: #065f46; /* Tailwind green-800 */
+            display: block;
         }
         .message.error {
             background-color: #fee2e2; /* Tailwind red-100 */
             color: #991b1b; /* Tailwind red-800 */
+            display: block;
         }
     </style>
 </head>
@@ -94,6 +93,7 @@
                 <label for="negativeThreshold">Negative Sentiment Threshold:</label>
                 <input type="number" id="negativeThreshold" name="negativeThreshold" step="0.1" min="-5" max="0" placeholder="-0.5" required class="rounded-lg">
             </div>
+
             <div class="checkbox-container">
                 <input type="checkbox" id="slackEnabled" name="slackEnabled">
                 <label for="slackEnabled" class="mb-0">Enable Slack Alerts</label>
@@ -102,119 +102,110 @@
                 <label for="slackWebhookUrl">Slack Webhook URL:</label>
                 <input type="url" id="slackWebhookUrl" name="slackWebhookUrl" placeholder="https://hooks.slack.com/..." class="rounded-lg">
             </div>
+
             <div class="checkbox-container">
                 <input type="checkbox" id="highlightProfanity" name="highlightProfanity">
                 <label for="highlightProfanity" class="mb-0">Highlight Profanity in Notes</label>
             </div>
+
             <button type="submit" class="rounded-lg">Save Settings</button>
         </form>
-        <div id="message" class="message hidden"></div>
+        <div id="message" class="message"></div>
     </div>
 
     <script>
-        const settingsForm = document.getElementById('settingsForm');
-        const messageDiv = document.getElementById('message');
-        const tagToApplyInput = document.getElementById('tagToApply');
-        const negativeThresholdInput = document.getElementById('negativeThreshold');
-        const slackEnabledInput = document.getElementById('slackEnabled');
-        const slackWebhookUrlInput = document.getElementById('slackWebhookUrl');
-        const highlightProfanityInput = document.getElementById('highlightProfanity');
+        document.addEventListener('DOMContentLoaded', () => {
+            const settingsForm = document.getElementById('settingsForm');
+            const messageDiv = document.getElementById('message');
+            const tagToApplyInput = document.getElementById('tagToApply');
+            const negativeThresholdInput = document.getElementById('negativeThreshold');
+            const slackEnabledInput = document.getElementById('slackEnabled');
+            const slackWebhookUrlInput = document.getElementById('slackWebhookUrl');
+            const highlightProfanityInput = document.getElementById('highlightProfanity');
 
-        const RENDER_BASE_URL = window.location.origin;
+            // The base URL is the current origin where this page is served from.
+            const API_BASE_URL = window.location.origin;
 
-        // **NEW**: Extract website_id from the URL query parameters.
-        // Crisp automatically adds this when loading the settings iframe.
-        const urlParams = new URLSearchParams(window.location.search);
-        const WEBSITE_ID = urlParams.get('website_id');
+            // Get the website_id from the URL query parameters provided by Crisp
+            const urlParams = new URLSearchParams(window.location.search);
+            const websiteId = urlParams.get('website_id');
 
-        function showMessage(msg, type) {
-            messageDiv.textContent = msg;
-            messageDiv.className = `message ${type}`;
-            messageDiv.classList.remove('hidden');
-        }
-
-        async function loadSettings() {
-            // **MODIFIED**: Check if WEBSITE_ID is present.
-            if (!WEBSITE_ID) {
-                showMessage('Error: Missing website_id. Cannot load settings.', 'error');
-                return;
+            // Function to display messages
+            function showMessage(msg, type) {
+                messageDiv.textContent = msg;
+                messageDiv.className = `message ${type}`;
             }
-            try {
-                // **MODIFIED**: Use the new multi-tenant API endpoint.
-                const response = await fetch(`${RENDER_BASE_URL}/api/config/${WEBSITE_ID}`, {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+
+            // Load settings when the page loads
+            async function loadSettings() {
+                if (!websiteId) {
+                    showMessage('Error: website_id is missing from the URL. Cannot load settings.', 'error');
+                    return;
                 }
-                const settings = await response.json();
+                try {
+                    const response = await fetch(`${API_BASE_URL}/plugin-config?website_id=${websiteId}`, {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const settings = await response.json();
 
-                tagToApplyInput.value = settings.tagToApply || '';
-                negativeThresholdInput.value = settings.negativeThreshold !== undefined ? settings.negativeThreshold : '';
-                slackEnabledInput.checked = settings.slackEnabled || false;
-                slackWebhookUrlInput.value = settings.slackWebhookUrl || '';
-                highlightProfanityInput.checked = settings.highlightProfanity || false;
+                    tagToApplyInput.value = settings.tagToApply || '';
+                    negativeThresholdInput.value = settings.negativeThreshold !== undefined ? settings.negativeThreshold : '';
+                    slackEnabledInput.checked = settings.slackEnabled || false;
+                    slackWebhookUrlInput.value = settings.slackWebhookUrl || '';
+                    highlightProfanityInput.checked = settings.highlightProfanity || false;
 
-            } catch (error) {
-                console.error('Error loading settings:', error);
-                showMessage('Failed to load settings. Please ensure the backend is running.', 'error');
-            }
-        }
-
-        settingsForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            messageDiv.classList.add('hidden');
-
-            // **MODIFIED**: Check if WEBSITE_ID is present before saving.
-            if (!WEBSITE_ID) {
-                showMessage('Error: Missing website_id. Cannot save settings.', 'error');
-                return;
-            }
-
-            const tagToApply = tagToApplyInput.value.trim();
-            const negativeThreshold = parseFloat(negativeThresholdInput.value);
-            const slackEnabled = slackEnabledInput.checked;
-            const slackWebhookUrl = slackWebhookUrlInput.value.trim();
-            const highlightProfanity = highlightProfanityInput.checked;
-
-            if (!tagToApply) {
-                showMessage('Segment Tag cannot be empty.', 'error');
-                return;
-            }
-            if (isNaN(negativeThreshold)) {
-                showMessage('Negative Sentiment Threshold must be a number.', 'error');
-                return;
-            }
-
-            try {
-                // **MODIFIED**: Use the new multi-tenant API endpoint for saving.
-                const response = await fetch(`${RENDER_BASE_URL}/api/config/${WEBSITE_ID}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        tagToApply,
-                        negativeThreshold,
-                        slackEnabled,
-                        slackWebhookUrl,
-                        highlightProfanity
-                    })
-                });
-
-                const result = await response.json();
-                if (response.ok && result.ok) {
-                    showMessage('Settings saved successfully!', 'success');
-                } else {
-                    const errorMessage = result.errors ? result.errors.join(', ') : (result.error || 'Unknown error');
-                    showMessage(`Failed to save settings: ${errorMessage}`, 'error');
+                } catch (error) {
+                    console.error('Error loading settings:', error);
+                    showMessage('Failed to load settings. Please ensure the backend is running.', 'error');
                 }
-            } catch (error) {
-                console.error('Error saving settings:', error);
-                showMessage('Failed to save settings. Please check your network connection.', 'error');
             }
+
+            // Save settings when the form is submitted
+            settingsForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                messageDiv.className = 'message'; // Hide previous messages
+
+                if (!websiteId) {
+                    showMessage('Error: website_id is missing. Cannot save settings.', 'error');
+                    return;
+                }
+
+                const payload = {
+                    tagToApply: tagToApplyInput.value.trim(),
+                    negativeThreshold: parseFloat(negativeThresholdInput.value),
+                    slackEnabled: slackEnabledInput.checked,
+                    slackWebhookUrl: slackWebhookUrlInput.value.trim(),
+                    highlightProfanity: highlightProfanityInput.checked,
+                };
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/plugin-config?website_id=${websiteId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.ok) {
+                        showMessage('Settings saved successfully!', 'success');
+                    } else {
+                        const errorMessage = result.errors ? result.errors.join(', ') : (result.error || 'Unknown error');
+                        showMessage(`Failed to save settings: ${errorMessage}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error saving settings:', error);
+                    showMessage('Failed to save settings. Please check your network connection.', 'error');
+                }
+            });
+
+            // Initialize settings on page load
+            loadSettings();
         });
-
-        loadSettings();
     </script>
 </body>
 </html>
