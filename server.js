@@ -61,6 +61,11 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// **FIXED**: Serve static files (plugin.json, settings.html) from the 'public' directory.
+// This is the standard way to handle static assets and is more reliable for deployment.
+app.use(express.static(path.join(__dirname, 'public')));
+
+
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR);
@@ -113,27 +118,7 @@ function savePluginConfig(websiteId, config) {
     }
 }
 
-// --- Plugin Endpoints ---
-
-// **FIXED**: Explicitly serve plugin files with corrected names.
-
-// Serve plugin.json, which Crisp needs to identify the plugin.
-app.get('/plugin.json', (req, res) => {
-    // Make sure 'plugin.json' is in your project's root directory.
-    res.sendFile(path.join(__dirname, 'plugin.json'));
-});
-
-// Serve the settings page. This path must match what you set in the Crisp Marketplace.
-app.get('/settings.html', (req, res) => {
-    // Make sure 'settings.html' is in your project's root directory.
-    res.sendFile(path.join(__dirname, 'settings.html'));
-});
-
-// A fallback for /settings in case the URL was configured without the .html extension.
-app.get('/settings', (req, res) => {
-    res.sendFile(path.join(__dirname, 'settings.html'));
-});
-
+// --- API Endpoints ---
 
 app.get('/api/config/:website_id', (req, res) => {
     try {
