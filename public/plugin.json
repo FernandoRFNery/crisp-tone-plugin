@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Detects customer messages with rude or negative tone. Tags, notifies, and alerts your team.",
   "website_url": "https://crisp-tone-plugin.onrender.com",
-  "api_url": "https://crisp-tone-plugin.onrender.com/plugin.json",
+  "api_url": "https://crisp-tone-plugin.onrender.com",
   "permissions": ["plugin"],
   "components": {
     "settings": {
