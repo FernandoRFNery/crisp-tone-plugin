@@ -5,124 +5,351 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crisp Plugin Settings</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f7fafc; /* Tailwind gray-100 */
-            padding: 20px;
+            background: #f8fafc;
+            min-height: 100vh;
+            padding: 24px 16px;
         }
-        .container {
-            background-color: #ffffff;
-            padding: 32px;
+        
+        .card {
+            background: white;
             border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: 500px;
-            width: 100%;
-            margin: auto;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
         }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #4a5568; /* Tailwind gray-700 */
-        }
-        input[type="text"],
-        input[type="number"],
-        input[type="url"] {
+        
+        .input-field {
             width: 100%;
-            padding: 10px;
-            margin-bottom: 16px;
-            border: 1px solid #cbd5e0; /* Tailwind gray-300 */
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
             border-radius: 8px;
-            box-sizing: border-box;
-            font-size: 16px;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            background: white;
         }
-        input[type="checkbox"] {
-            margin-right: 8px;
-            transform: scale(1.2);
+        
+        .input-field:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
-        .checkbox-container {
-            display: flex;
-            align-items: center;
-            margin-bottom: 16px;
+        
+        .input-field::placeholder {
+            color: #9ca3af;
         }
-        button {
-            background-color: #4c51bf; /* Tailwind indigo-700 */
+        
+        .label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #e5e7eb;
+            border-radius: 12px;
+            transition: background-color 0.2s ease;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        
+        .toggle-switch.active {
+            background: #3b82f6;
+        }
+        
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.2s ease;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+        
+        .toggle-switch.active::after {
+            transform: translateX(20px);
+        }
+        
+        .button-primary {
+            background: #3b82f6;
             color: white;
-            padding: 12px 20px;
+            padding: 12px 24px;
             border: none;
             border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
             cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: background-color 0.2s ease-in-out;
+            transition: all 0.2s ease;
             width: 100%;
         }
-        button:hover {
-            background-color: #3b3a7f;
+        
+        .button-primary:hover {
+            background: #2563eb;
         }
-        .message {
-            margin-top: 20px;
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: 600;
-            display: none; /* Hidden by default */
+        
+        .button-primary:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
         }
-        .message.success {
-            background-color: #d1fae5; /* Tailwind green-100 */
-            color: #065f46; /* Tailwind green-800 */
-            display: block;
-        }
-        .message.error {
-            background-color: #fee2e2; /* Tailwind red-100 */
-            color: #991b1b; /* Tailwind red-800 */
-            display: block;
-        }
-        .info-box {
-            background-color: #eef2ff; /* Tailwind indigo-50 */
-            border-left: 4px solid #4c51bf; /* Tailwind indigo-700 */
+        
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             padding: 16px;
-            margin-top: 24px;
+            background: #f9fafb;
             border-radius: 8px;
-            color: #4338ca; /* Tailwind indigo-800 */
+            margin-bottom: 16px;
+        }
+        
+        .toggle-content h3 {
+            font-size: 14px;
+            font-weight: 500;
+            color: #111827;
+            margin: 0 0 2px 0;
+        }
+        
+        .toggle-content p {
+            font-size: 13px;
+            color: #6b7280;
+            margin: 0;
+        }
+        
+        .message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-top: 16px;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+        }
+        
+        .message.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .message.success {
+            background: #f0fdf4;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+        
+        .message.error {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+        
+        .info-icon {
+            width: 16px;
+            height: 16px;
+            color: #6b7280;
+            cursor: pointer;
+            transition: color 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .info-icon:hover {
+            color: #3b82f6;
+        }
+        
+        .sentiment-popup {
+            position: absolute;
+            top: -8px;
+            right: 24px;
+            width: 280px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(4px);
+            transition: all 0.2s ease;
+            z-index: 50;
+        }
+        
+        .sentiment-popup.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        
+        .popup-arrow {
+            position: absolute;
+            top: 16px;
+            left: -6px;
+            width: 12px;
+            height: 12px;
+            background: white;
+            border-left: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e5e7eb;
+            transform: rotate(45deg);
+        }
+        
+        .popup-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 8px;
+        }
+        
+        .popup-text {
+            font-size: 13px;
+            color: #4b5563;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        
+        .popup-examples {
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .popup-examples-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+        
+        .popup-examples-list {
+            font-size: 12px;
+            color: #4b5563;
+            line-height: 1.4;
+        }
+        
+        .popup-footer {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 8px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 16px;
+        }
+        
+        .hint-text {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+        
+        .divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 24px 0;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2 class="text-2xl font-bold mb-6 text-gray-800">Plugin Settings</h2>
-        <form id="settingsForm">
-            <div class="mb-4">
-                <label for="tagToApply">Segment Tag to Apply:</label>
-                <input type="text" id="tagToApply" name="tagToApply" placeholder="e.g. profanity-alert" required class="rounded-lg">
-            </div>
-            <div class="mb-4">
-                <label for="negativeThreshold">Negative Sentiment Threshold:</label>
-                <input type="number" id="negativeThreshold" name="negativeThreshold" step="0.1" min="-5" max="0" placeholder="-0.5" required class="rounded-lg">
+    <div class="max-w-md mx-auto">
+        <div class="card p-6">
+            <div class="text-center mb-6">
+                <h1 class="text-xl font-semibold text-gray-900 mb-1">Plugin Settings</h1>
+                <p class="text-sm text-gray-600">Configure your sentiment monitoring preferences</p>
             </div>
 
-            <div class="checkbox-container">
-                <input type="checkbox" id="slackEnabled" name="slackEnabled">
-                <label for="slackEnabled" class="mb-0">Enable Slack Alerts</label>
-            </div>
-            <div class="mb-4">
-                <label for="slackWebhookUrl">Slack Webhook URL:</label>
-                <input type="url" id="slackWebhookUrl" name="slackWebhookUrl" placeholder="https://hooks.slack.com/..." class="rounded-lg">
-            </div>
+            <form id="settingsForm">
+                <!-- Basic Settings -->
+                <div class="input-group">
+                    <label for="tagToApply" class="label">Segment Tag</label>
+                    <input type="text" id="tagToApply" name="tagToApply" class="input-field" placeholder="e.g. profanity-alert" required>
+                </div>
+                
+                <div class="input-group">
+                    <div class="flex items-center gap-2 mb-1">
+                        <label for="negativeThreshold" class="label mb-0">Sentiment Threshold</label>
+                        <div class="info-icon-wrapper" id="sentimentInfoIcon">
+                            <svg class="info-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div style="position: relative;">
+                        <input type="number" id="negativeThreshold" name="negativeThreshold" class="input-field" placeholder="-0.5" step="0.1" min="-5" max="0" required>
+                        
+                        <!-- Sentiment Info Popup -->
+                        <div id="sentimentPopup" class="sentiment-popup">
+                            <div class="popup-arrow"></div>
+                            <div class="popup-title">About Sentiment Scores</div>
+                            <p class="popup-text">
+                                Sentiment scores range from <strong>-5</strong> (very negative) to <strong>+5</strong> (very positive), with <strong>0</strong> being neutral.
+                            </p>
+                            <div class="popup-examples">
+                                <div class="popup-examples-title">Example thresholds:</div>
+                                <div class="popup-examples-list">
+                                    • <strong>-1.0</strong>: Moderately negative content<br>
+                                    • <strong>-2.0</strong>: Significantly negative content<br>
+                                    • <strong>-3.0</strong>: Very negative interactions only
+                                </div>
+                            </div>
+                            <p class="popup-footer">
+                                Alerts trigger when messages contain profanity AND fall below your threshold.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="hint-text">Range: -5.0 (very negative) to 0 (neutral)</div>
+                </div>
 
-            <div class="checkbox-container">
-                <input type="checkbox" id="highlightProfanity" name="highlightProfanity">
-                <label for="highlightProfanity" class="mb-0">Highlight Profanity in Notes</label>
-            </div>
+                <div class="divider"></div>
 
-            <button type="submit" class="rounded-lg">Save Settings</button>
-        </form>
-        <div id="message" class="message"></div>
-        
-        <div class="info-box">
-            <h3 class="font-bold text-lg mb-2">About Sentiment Scores</h3>
-            <p class="text-sm">The sentiment score is a number that indicates the emotional tone of a message. Scores range from -5 (very negative) to +5 (very positive). A score of 0 is neutral. This plugin will trigger an alert if a message contains profanity AND its sentiment score is below the threshold you set.</p>
+                <!-- Alert Settings -->
+                <div class="toggle-row">
+                    <div class="toggle-content">
+                        <h3>Slack Alerts</h3>
+                        <p>Send notifications to your workspace</p>
+                    </div>
+                    <div class="toggle-switch" id="slackToggle">
+                        <input type="checkbox" id="slackEnabled" name="slackEnabled" style="display: none;">
+                    </div>
+                </div>
+                
+                <div class="input-group" id="slackUrlGroup" style="display: none;">
+                    <label for="slackWebhookUrl" class="label">Webhook URL</label>
+                    <input type="url" id="slackWebhookUrl" name="slackWebhookUrl" class="input-field" placeholder="https://hooks.slack.com/...">
+                </div>
+
+                <!-- Display Settings -->
+                <div class="toggle-row">
+                    <div class="toggle-content">
+                        <h3>Highlight Profanity</h3>
+                        <p>Visually emphasize problematic content</p>
+                    </div>
+                    <div class="toggle-switch" id="highlightToggle">
+                        <input type="checkbox" id="highlightProfanity" name="highlightProfanity" style="display: none;">
+                    </div>
+                </div>
+
+                <button type="submit" class="button-primary">
+                    Save Settings
+                </button>
+            </form>
+
+            <div id="message" class="message"></div>
         </div>
     </div>
 
@@ -135,6 +362,11 @@
             const slackEnabledInput = document.getElementById('slackEnabled');
             const slackWebhookUrlInput = document.getElementById('slackWebhookUrl');
             const highlightProfanityInput = document.getElementById('highlightProfanity');
+            const slackToggle = document.getElementById('slackToggle');
+            const highlightToggle = document.getElementById('highlightToggle');
+            const slackUrlGroup = document.getElementById('slackUrlGroup');
+            const sentimentInfoIcon = document.getElementById('sentimentInfoIcon');
+            const sentimentPopup = document.getElementById('sentimentPopup');
 
             // The base URL is the current origin where this page is served from.
             const API_BASE_URL = window.location.origin;
@@ -143,10 +375,59 @@
             const urlParams = new URLSearchParams(window.location.search);
             const websiteId = urlParams.get('website_id');
 
-            // Function to display messages
+            // Sentiment info popup functionality
+            let popupTimeout;
+            
+            sentimentInfoIcon.addEventListener('mouseenter', () => {
+                clearTimeout(popupTimeout);
+                sentimentPopup.classList.add('show');
+            });
+            
+            sentimentInfoIcon.addEventListener('mouseleave', () => {
+                popupTimeout = setTimeout(() => {
+                    sentimentPopup.classList.remove('show');
+                }, 150);
+            });
+            
+            // Keep popup open when hovering over it
+            sentimentPopup.addEventListener('mouseenter', () => {
+                clearTimeout(popupTimeout);
+            });
+            
+            sentimentPopup.addEventListener('mouseleave', () => {
+                sentimentPopup.classList.remove('show');
+            });
+
+            // Toggle switch functionality
+            function setupToggle(toggle, checkbox, relatedGroup = null) {
+                toggle.addEventListener('click', () => {
+                    checkbox.checked = !checkbox.checked;
+                    toggle.classList.toggle('active', checkbox.checked);
+                    
+                    if (relatedGroup) {
+                        relatedGroup.style.display = checkbox.checked ? 'block' : 'none';
+                    }
+                });
+            }
+
+            setupToggle(slackToggle, slackEnabledInput, slackUrlGroup);
+            setupToggle(highlightToggle, highlightProfanityInput);
+
+            // Function to display messages with animation
             function showMessage(msg, type) {
                 messageDiv.textContent = msg;
                 messageDiv.className = `message ${type}`;
+                // Trigger animation
+                setTimeout(() => {
+                    messageDiv.classList.add('show');
+                }, 50);
+                
+                // Auto-hide success messages
+                if (type === 'success') {
+                    setTimeout(() => {
+                        messageDiv.classList.remove('show');
+                    }, 3000);
+                }
             }
 
             // Load settings when the page loads
@@ -167,9 +448,16 @@
 
                     tagToApplyInput.value = settings.tagToApply || '';
                     negativeThresholdInput.value = settings.negativeThreshold !== undefined ? settings.negativeThreshold : '';
+                    
+                    // Update toggle switches
                     slackEnabledInput.checked = settings.slackEnabled || false;
+                    slackToggle.classList.toggle('active', slackEnabledInput.checked);
+                    slackUrlGroup.style.display = slackEnabledInput.checked ? 'block' : 'none';
+                    
                     slackWebhookUrlInput.value = settings.slackWebhookUrl || '';
+                    
                     highlightProfanityInput.checked = settings.highlightProfanity || false;
+                    highlightToggle.classList.toggle('active', highlightProfanityInput.checked);
 
                 } catch (error) {
                     console.error('Error loading settings:', error);
@@ -180,12 +468,18 @@
             // Save settings when the form is submitted
             settingsForm.addEventListener('submit', async (event) => {
                 event.preventDefault();
-                messageDiv.className = 'message'; // Hide previous messages
+                messageDiv.classList.remove('show'); // Hide previous messages
 
                 if (!websiteId) {
                     showMessage('Error: website_id is missing. Cannot save settings.', 'error');
                     return;
                 }
+
+                // Add loading state to button
+                const submitButton = event.target.querySelector('button[type="submit"]');
+                const originalText = submitButton.textContent;
+                submitButton.textContent = 'Saving...';
+                submitButton.disabled = true;
 
                 const payload = {
                     tagToApply: tagToApplyInput.value.trim(),
@@ -213,6 +507,10 @@
                 } catch (error) {
                     console.error('Error saving settings:', error);
                     showMessage('Failed to save settings. Please check your network connection.', 'error');
+                } finally {
+                    // Restore button state
+                    submitButton.textContent = originalText;
+                    submitButton.disabled = false;
                 }
             });
 
