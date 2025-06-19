@@ -79,6 +79,14 @@
             color: #991b1b; /* Tailwind red-800 */
             display: block;
         }
+        .info-box {
+            background-color: #eef2ff; /* Tailwind indigo-50 */
+            border-left: 4px solid #4c51bf; /* Tailwind indigo-700 */
+            padding: 16px;
+            margin-top: 24px;
+            border-radius: 8px;
+            color: #4338ca; /* Tailwind indigo-800 */
+        }
     </style>
 </head>
 <body>
@@ -111,6 +119,11 @@
             <button type="submit" class="rounded-lg">Save Settings</button>
         </form>
         <div id="message" class="message"></div>
+        
+        <div class="info-box">
+            <h3 class="font-bold text-lg mb-2">About Sentiment Scores</h3>
+            <p class="text-sm">The sentiment score is a number that indicates the emotional tone of a message. Scores range from -5 (very negative) to +5 (very positive). A score of 0 is neutral. This plugin will trigger an alert if a message contains profanity AND its sentiment score is below the threshold you set.</p>
+        </div>
     </div>
 
     <script>
