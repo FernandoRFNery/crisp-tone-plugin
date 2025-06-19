@@ -31,17 +31,17 @@ const sentiment = new Sentiment();
 
 app.set('trust proxy', 1);
 
-// Configure helmet to allow Crisp's domain to embed content
+// Configure helmet to allow Crisp's domain(s) to embed content
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat'],
-            styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat'],
-            imgSrc: ["'self'", 'data:', 'https://app.crisp.chat'],
-            connectSrc: ["'self'", 'https://app.crisp.chat'],
-            // THIS IS THE KEY CHANGE: Use frame-ancestors to allow Crisp to embed
-            frameAncestors: ["'self'", 'https://app.crisp.chat'],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            imgSrc: ["'self'", 'data:', 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            connectSrc: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            // Updated: Allow both app.crisp.chat and marketplace.crisp.chat for embedding
+            frameAncestors: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
             // Add other directives as needed by your application
         }
     }
