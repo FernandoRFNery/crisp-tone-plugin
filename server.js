@@ -1,9 +1,8 @@
 /**
  * Tone & Toxicity Detection Server (Crisp Plugin - Self-Hosted AI Model)
  * -----------------------------------------------------------------------
- * This version uses a free, locally-hosted machine learning model via
- * Hugging Face's transformers.js library for high-quality, private, and
- * cost-free toxicity detection.
+ * This version uses a free, locally-hosted and QUANTIZED machine learning 
+ * model for memory-efficient, private, and cost-free toxicity detection.
  */
 
 // Use import for all modules
@@ -23,7 +22,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 
-// --- NEW: Singleton Class to manage the AI model ---
+// --- Singleton Class to manage the AI model ---
 // This ensures the model is loaded only once when the server starts.
 class ToxicityPipeline {
     static task = 'text-classification';
@@ -32,10 +31,13 @@ class ToxicityPipeline {
 
     static async getInstance(progress_callback = null) {
         if (this.instance === null) {
-            console.log('Loading toxicity detection model...');
+            console.log('Loading quantized (memory-efficient) toxicity detection model...');
             const start = Date.now();
             // The pipeline function is now imported, so we don't need to await the import itself.
-            this.instance = pipeline(this.task, this.model, { progress_callback });
+            this.instance = pipeline(this.task, this.model, { 
+                quantized: true, // This enables the memory-saving version of the model.
+                progress_callback 
+            });
             this.instance.then(() => {
                  console.log(`Model loaded successfully in ${(Date.now() - start) / 1000}s`);
             });
