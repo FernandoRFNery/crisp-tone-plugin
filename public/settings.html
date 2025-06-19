@@ -33,7 +33,7 @@
         }
         input[type="text"],
         input[type="number"],
-        input[type="url"] { /* Added url type for Slack webhook */
+        input[type="url"] {
             width: 100%;
             padding: 10px;
             margin-bottom: 16px;
@@ -44,7 +44,7 @@
         }
         input[type="checkbox"] {
             margin-right: 8px;
-            transform: scale(1.2); /* Make checkbox slightly larger */
+            transform: scale(1.2);
         }
         .checkbox-container {
             display: flex;
@@ -94,7 +94,6 @@
                 <label for="negativeThreshold">Negative Sentiment Threshold:</label>
                 <input type="number" id="negativeThreshold" name="negativeThreshold" step="0.1" min="-5" max="0" placeholder="-0.5" required class="rounded-lg">
             </div>
-
             <div class="checkbox-container">
                 <input type="checkbox" id="slackEnabled" name="slackEnabled">
                 <label for="slackEnabled" class="mb-0">Enable Slack Alerts</label>
@@ -103,12 +102,10 @@
                 <label for="slackWebhookUrl">Slack Webhook URL:</label>
                 <input type="url" id="slackWebhookUrl" name="slackWebhookUrl" placeholder="https://hooks.slack.com/..." class="rounded-lg">
             </div>
-
             <div class="checkbox-container">
                 <input type="checkbox" id="highlightProfanity" name="highlightProfanity">
                 <label for="highlightProfanity" class="mb-0">Highlight Profanity in Notes</label>
             </div>
-
             <button type="submit" class="rounded-lg">Save Settings</button>
         </form>
         <div id="message" class="message hidden"></div>
@@ -123,26 +120,30 @@
         const slackWebhookUrlInput = document.getElementById('slackWebhookUrl');
         const highlightProfanityInput = document.getElementById('highlightProfanity');
 
-        // Define the base URL for your Render app dynamically
-        // This makes the client-side code more flexible as it derives the base URL
-        // from the current window's origin (where the settings.html is served).
         const RENDER_BASE_URL = window.location.origin;
 
-        // Function to display messages
+        // **NEW**: Extract website_id from the URL query parameters.
+        // Crisp automatically adds this when loading the settings iframe.
+        const urlParams = new URLSearchParams(window.location.search);
+        const WEBSITE_ID = urlParams.get('website_id');
+
         function showMessage(msg, type) {
             messageDiv.textContent = msg;
             messageDiv.className = `message ${type}`;
             messageDiv.classList.remove('hidden');
         }
 
-        // Load settings when the page loads
         async function loadSettings() {
+            // **MODIFIED**: Check if WEBSITE_ID is present.
+            if (!WEBSITE_ID) {
+                showMessage('Error: Missing website_id. Cannot load settings.', 'error');
+                return;
+            }
             try {
-                const response = await fetch(`${RENDER_BASE_URL}/plugin-config`, {
+                // **MODIFIED**: Use the new multi-tenant API endpoint.
+                const response = await fetch(`${RENDER_BASE_URL}/api/config/${WEBSITE_ID}`, {
                     method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
+                    headers: { 'Content-Type': 'application/json' }
                 });
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -151,9 +152,9 @@
 
                 tagToApplyInput.value = settings.tagToApply || '';
                 negativeThresholdInput.value = settings.negativeThreshold !== undefined ? settings.negativeThreshold : '';
-                slackEnabledInput.checked = settings.slackEnabled || false; // Set checked for boolean
+                slackEnabledInput.checked = settings.slackEnabled || false;
                 slackWebhookUrlInput.value = settings.slackWebhookUrl || '';
-                highlightProfanityInput.checked = settings.highlightProfanity || false; // Set checked for boolean
+                highlightProfanityInput.checked = settings.highlightProfanity || false;
 
             } catch (error) {
                 console.error('Error loading settings:', error);
@@ -161,16 +162,21 @@
             }
         }
 
-        // Save settings when the form is submitted
         settingsForm.addEventListener('submit', async (event) => {
             event.preventDefault();
-            messageDiv.classList.add('hidden'); // Hide previous messages
+            messageDiv.classList.add('hidden');
+
+            // **MODIFIED**: Check if WEBSITE_ID is present before saving.
+            if (!WEBSITE_ID) {
+                showMessage('Error: Missing website_id. Cannot save settings.', 'error');
+                return;
+            }
 
             const tagToApply = tagToApplyInput.value.trim();
             const negativeThreshold = parseFloat(negativeThresholdInput.value);
-            const slackEnabled = slackEnabledInput.checked; // Get boolean from checkbox
+            const slackEnabled = slackEnabledInput.checked;
             const slackWebhookUrl = slackWebhookUrlInput.value.trim();
-            const highlightProfanity = highlightProfanityInput.checked; // Get boolean from checkbox
+            const highlightProfanity = highlightProfanityInput.checked;
 
             if (!tagToApply) {
                 showMessage('Segment Tag cannot be empty.', 'error');
@@ -182,22 +188,20 @@
             }
 
             try {
-                const response = await fetch(`${RENDER_BASE_URL}/plugin-config`, {
+                // **MODIFIED**: Use the new multi-tenant API endpoint for saving.
+                const response = await fetch(`${RENDER_BASE_URL}/api/config/${WEBSITE_ID}`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         tagToApply,
                         negativeThreshold,
-                        slackEnabled,       // Include new fields
-                        slackWebhookUrl,    // Include new fields
-                        highlightProfanity  // Include new fields
+                        slackEnabled,
+                        slackWebhookUrl,
+                        highlightProfanity
                     })
                 });
 
                 const result = await response.json();
-
                 if (response.ok && result.ok) {
                     showMessage('Settings saved successfully!', 'success');
                 } else {
@@ -210,7 +214,6 @@
             }
         });
 
-        // Initialize settings load on page load
         loadSettings();
     </script>
 </body>
