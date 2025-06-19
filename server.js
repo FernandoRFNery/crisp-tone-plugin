@@ -44,7 +44,8 @@ app.use(helmet({
             connectSrc: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
             frameAncestors: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
         }
-    }
+    },
+    xFrameOptions: false, // Disable X-Frame-Options as it's redundant with frame-ancestors and can cause conflicts.
 }));
 
 app.use(bodyParser.json());
