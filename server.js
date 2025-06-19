@@ -406,7 +406,7 @@ app.post('/webhook', async (req, res) => {
             await processMessage(data);
         }
     } catch (err) {
-        console.error(`[${new D ate().toISOString()}] Error in /webhook handler:`, err);
+        console.error(`[${new Date().toISOString()}] Error in /webhook handler:`, err);
     }
 });
 
