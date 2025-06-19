@@ -3,22 +3,26 @@
  * --------------------------------------------------------------
  * This version exposes a simple plugin configuration API for Crisp plugin UI integration.
  * Admins can GET/POST plugin config (tag/segment and negative threshold) via /plugin-config.
- * * Usage:
+ *
+ * Usage:
  * - All secrets (CRISP_IDENTIFIER, CRISP_KEY, SLACK_WEBHOOK_URL, CRISP_WEBSITE_ID) remain in .env.
  * - Tag (segment) and negative threshold are editable via the plugin config API.
- * - The plugin config is stored in-memory by default, but can be extended to persist (e.g., DB, file).
- * * Endpoints:
+ * - Plugin config now persists to a JSON file.
+ *
+ * Endpoints:
  * - GET  /plugin-config   (returns current config)
- * - POST /plugin-config   (accepts { tagToApply, negativeThreshold })\n * - POST /webhook         (Crisp webhook, unchanged)
+ * - POST /plugin-config   (accepts { tagToApply, negativeThreshold, slackEnabled, slackWebhookUrl, highlightProfanity })
+ * - POST /webhook         (Crisp webhook, unchanged)
  * - GET  /health          (health check)
  */
 
 require('dotenv').config();
 
 const path = require("path");
+const fs = require('fs'); // Import the file system module
 const express = require('express');
 const bodyParser = require('body-parser');
-const helmet = require('helmet'); // Import helmet
+const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Profanity } = require('@2toad/profanity');
 const Sentiment = require('sentiment');
@@ -31,17 +35,16 @@ const sentiment = new Sentiment();
 
 app.set('trust proxy', 1);
 
-// Configure helmet to allow Crisp's domain to embed content
+// Configure helmet to allow Crisp's domain(s) to embed content
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat'],
-            styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat'],
-            imgSrc: ["'self'", 'data:', 'https://app.crisp.chat'],
-            connectSrc: ["'self'", 'https://app.crisp.chat'],
-            // THIS IS THE KEY CHANGE: Use frame-ancestors to allow Crisp to embed
-            frameAncestors: ["'self'", 'https://app.crisp.chat'],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            imgSrc: ["'self'", 'data:', 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            connectSrc: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            frameAncestors: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
             // Add other directives as needed by your application
         }
     }
@@ -57,67 +60,83 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Serve plugin.json with correct content-type (Crisp compatibility)
-// This serves the manifest (plugin.json) itself, not the settings UI.
-app.get("/plugin.json", (req, res) => {
-    res.type("application/json");
-    res.sendFile(path.join(__dirname, "public", "plugin.json"));
-});
+// Define the path for the configuration file
+const CONFIG_FILE_PATH = path.join(__dirname, "config.json");
 
-// NEW: Serve the HTML settings page
-app.get("/settings", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "settings.html"));
-});
-
-// Serve static plugin files (e.g. any other assets in public folder)
-// Ensure this line is after the specific routes for /plugin.json and /settings
-app.use(express.static(path.join(__dirname, "public")));
-
-
-// --- ⬇️ CONFIGURATION (Secrets from env, plugin config editable via API) ⬇️ ---
+// --- ⬇️ CONFIGURATION (Persisted to file, falling back to env/defaults) ⬇️ ---
 
 const CRISP_IDENTIFIER = process.env.CRISP_IDENTIFIER;
 const CRISP_KEY = process.env.CRISP_KEY;
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+const SLACK_WEBHOOK_URL_ENV = process.env.SLACK_WEBHOOK_URL; // Renamed to avoid conflict
 const CRISP_WEBSITE_ID = process.env.CRISP_WEBSITE_ID;
 
-if (!CRISP_IDENTIFIER || !CRISP_KEY || !SLACK_WEBHOOK_URL || !CRISP_WEBSITE_ID) {
-    console.error("Missing required environment variables. Please set CRISP_IDENTIFIER, CRISP_KEY, SLACK_WEBHOOK_URL, and CRISP_WEBSITE_ID.");
+if (!CRISP_IDENTIFIER || !CRISP_KEY || !CRISP_WEBSITE_ID) {
+    console.error("Missing required environment variables. Please set CRISP_IDENTIFIER, CRISP_KEY, and CRISP_WEBSITE_ID. SLACK_WEBHOOK_URL is optional.");
     process.exit(1);
 }
 
-// --- Plugin Config (editable via API) ---
-// Default values (can be overridden via POST /plugin-config)
-let pluginConfig = {
-    tagToApply: process.env.TAG_TO_APPLY || "profanity-alert",
-    negativeThreshold: typeof process.env.NEGATIVE_THRESHOLD !== "undefined"
-        ? Number(process.env.NEGATIVE_THRESHOLD)
-        : 0
-};
+// Function to load plugin config from file or initialize defaults
+function loadPluginConfig() {
+    try {
+        if (fs.existsSync(CONFIG_FILE_PATH)) {
+            const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf8');
+            console.log(`[${new Date().toISOString()}] Loaded plugin config from file.`);
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error reading config file, using defaults:`, error);
+    }
+    // Default values (if file doesn't exist or error occurs, or for first run)
+    return {
+        tagToApply: process.env.TAG_TO_APPLY || "profanity-alert",
+        negativeThreshold: typeof process.env.NEGATIVE_THRESHOLD !== "undefined"
+            ? Number(process.env.NEGATIVE_THRESHOLD)
+            : 0,
+        slackEnabled: process.env.SLACK_ENABLED === 'true' || false,
+        slackWebhookUrl: SLACK_WEBHOOK_URL_ENV || "", // Use env var for initial load
+        highlightProfanity: process.env.HIGHLIGHT_PROFANITY === 'true' || false
+    };
+}
+
+// Function to save plugin config to file
+function savePluginConfig(config) {
+    try {
+        fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2), 'utf8');
+        console.log(`[${new Date().toISOString()}] Saved plugin config to file.`);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error writing config file:`, error);
+    }
+}
+
+// Initialize plugin config
+let pluginConfig = loadPluginConfig();
 
 // --- Plugin Config API (for Crisp plugin UI) ---
 
 /**
  * GET /plugin-config
- * Returns the current plugin config (tagToApply, negativeThreshold)
+ * Returns the current plugin config (tagToApply, negativeThreshold, etc.)
  */
 app.get('/plugin-config', (req, res) => {
     res.status(200).json({
         tagToApply: pluginConfig.tagToApply,
-        negativeThreshold: pluginConfig.negativeThreshold
+        negativeThreshold: pluginConfig.negativeThreshold,
+        slackEnabled: pluginConfig.slackEnabled,
+        slackWebhookUrl: pluginConfig.slackWebhookUrl,
+        highlightProfanity: pluginConfig.highlightProfanity
     });
 });
 
 /**
  * POST /plugin-config
- * Accepts { tagToApply, negativeThreshold }
- * Example: { "tagToApply": "urgent", "negativeThreshold": -0.5 }
+ * Accepts { tagToApply, negativeThreshold, slackEnabled, slackWebhookUrl, highlightProfanity }
  */
 app.post('/plugin-config', (req, res) => {
-    const { tagToApply, negativeThreshold } = req.body || {};
+    const { tagToApply, negativeThreshold, slackEnabled, slackWebhookUrl, highlightProfanity } = req.body || {};
     let updated = false;
     let errors = [];
 
+    // Validate and update fields
     if (typeof tagToApply === "string" && tagToApply.trim().length > 0) {
         pluginConfig.tagToApply = tagToApply.trim();
         updated = true;
@@ -125,24 +144,48 @@ app.post('/plugin-config', (req, res) => {
         errors.push("tagToApply must be a non-empty string.");
     }
 
-    if (
-        typeof negativeThreshold === "number" &&
-        isFinite(negativeThreshold)
-    ) {
+    if (typeof negativeThreshold === "number" && isFinite(negativeThreshold)) {
         pluginConfig.negativeThreshold = negativeThreshold;
         updated = true;
     } else if (typeof negativeThreshold !== "undefined") {
         errors.push("negativeThreshold must be a number.");
     }
 
+    if (typeof slackEnabled === "boolean") {
+        pluginConfig.slackEnabled = slackEnabled;
+        updated = true;
+    } else if (typeof slackEnabled !== "undefined") {
+        errors.push("slackEnabled must be a boolean.");
+    }
+
+    // slackWebhookUrl can be an empty string if slackEnabled is false or user removes it
+    if (typeof slackWebhookUrl === "string") {
+        pluginConfig.slackWebhookUrl = slackWebhookUrl.trim();
+        updated = true;
+    } else if (typeof slackWebhookUrl !== "undefined") {
+        errors.push("slackWebhookUrl must be a string.");
+    }
+
+    if (typeof highlightProfanity === "boolean") {
+        pluginConfig.highlightProfanity = highlightProfanity;
+        updated = true;
+    } else if (typeof highlightProfanity !== "undefined") {
+        errors.push("highlightProfanity must be a boolean.");
+    }
+
     if (errors.length > 0) {
         return res.status(400).json({ ok: false, errors });
     }
+
     if (updated) {
+        savePluginConfig(pluginConfig); // Save the updated config to file
         return res.status(200).json({
             ok: true,
             tagToApply: pluginConfig.tagToApply,
-            negativeThreshold: pluginConfig.negativeThreshold
+            negativeThreshold: pluginConfig.negativeThreshold,
+            slackEnabled: pluginConfig.slackEnabled,
+            slackWebhookUrl: pluginConfig.slackWebhookUrl,
+            highlightProfanity: pluginConfig.highlightProfanity
         });
     }
     return res.status(400).json({ ok: false, error: "No valid fields provided." });
@@ -150,7 +193,24 @@ app.post('/plugin-config', (req, res) => {
 
 // --- ⬆️ END CONFIGURATION ⬆️ ---
 
+// Serve plugin.json with correct content-type (Crisp compatibility)
+app.get("/plugin.json", (req, res) => {
+    res.type("application/json");
+    res.sendFile(path.join(__dirname, "public", "plugin.json"));
+});
+
+// Serve the HTML settings page
+app.get("/settings", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "settings.html"));
+});
+
+// Serve static plugin files (e.g. any other assets in public folder)
+app.use(express.static(path.join(__dirname, "public")));
+
+
 function getAuth() {
+    // Note: If SLACK_WEBHOOK_URL_ENV is only for initial load, ensure SLACK_WEBHOOK_URL
+    // in pluginConfig is used for actual Slack calls.
     return Buffer.from(`${CRISP_IDENTIFIER}:${CRISP_KEY}`).toString('base64');
 }
 
@@ -178,6 +238,10 @@ function getAllProfanitiesInMessage(message) {
 }
 
 function highlightProfanity(message) {
+    // Only highlight if highlightProfanity setting is true
+    if (!pluginConfig.highlightProfanity) {
+        return message;
+    }
     const profaneWords = getAllProfanitiesInMessage(message);
     if (!Array.isArray(profaneWords) || profaneWords.length === 0) return message;
     const uniqueProfaneWords = [...new Set(profaneWords)];
@@ -310,9 +374,10 @@ async function tagCrispConversation(websiteId, sessionId, tag) {
     }
 }
 
+// Function to send Slack notification, respects pluginConfig.slackEnabled
 async function sendSlackNotification(alertNote, sessionId, alertDetails = {}) {
-    if (!SLACK_WEBHOOK_URL) {
-        console.log(`[${new Date().toISOString()}] Slack Webhook URL not configured. Skipping notification.`);
+    if (!pluginConfig.slackEnabled || !pluginConfig.slackWebhookUrl) {
+        console.log(`[${new Date().toISOString()}] Slack alerts disabled or Webhook URL not configured. Skipping notification.`);
         return;
     }
     const crispLink = `https://app.crisp.chat/website/${CRISP_WEBSITE_ID}/inbox/${sessionId}/`;
@@ -387,7 +452,7 @@ async function sendSlackNotification(alertNote, sessionId, alertDetails = {}) {
         ]
     };
     try {
-        const response = await fetch(SLACK_WEBHOOK_URL, {
+        const response = await fetch(pluginConfig.slackWebhookUrl, { // Use webhook URL from pluginConfig
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -435,6 +500,7 @@ async function processMessage(data) {
                 const uniqueProfaneWords = Array.isArray(profaneWords) && profaneWords.length > 0
                     ? [...new Set(profaneWords)]
                     : [];
+                // Use highlightProfanity logic based on pluginConfig
                 const highlightedMessage = highlightProfanity(content);
                 const sentimentSummary = getSentimentSummary(analysis.comparative);
                 const note = [
@@ -453,6 +519,7 @@ async function processMessage(data) {
 
                 await Promise.allSettled([
                     postPrivateNoteToCrisp(website_id, session_id, note),
+                    // Pass the webhook URL and enabled status from pluginConfig
                     sendSlackNotification(note, session_id, {
                         sentimentScore: analysis.comparative,
                         sentimentSummary,
