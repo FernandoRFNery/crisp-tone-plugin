@@ -11,6 +11,8 @@
  * - This prevents settings from one user from overwriting another's.
  *
  * Endpoints:
+ * - GET  /plugin.json              (serves the plugin manifest)
+ * - GET  /settings.html            (serves the plugin settings page)
  * - GET  /api/config/:website_id   (returns config for a specific website)
  * - POST /api/config/:website_id   (saves config for a specific website)
  * - POST /webhook                  (Crisp webhook, now multi-tenant aware)
@@ -59,16 +61,13 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// **NEW**: Define a directory for storing per-website configuration files.
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR);
     console.log(`[${new Date().toISOString()}] Created data directory at: ${DATA_DIR}`);
 }
 
-// **MODIFIED**: Helper function to get the config file path for a specific website.
 function getConfigFilePath(websiteId) {
-    // Basic sanitization to prevent directory traversal attacks
     const safeWebsiteId = path.basename(websiteId);
     if (!safeWebsiteId || safeWebsiteId === '.' || safeWebsiteId === '..') {
         throw new Error("Invalid website_id provided.");
@@ -76,19 +75,14 @@ function getConfigFilePath(websiteId) {
     return path.join(DATA_DIR, `${safeWebsiteId}.json`);
 }
 
-// --- ⬇️ CONFIGURATION (Per-Website) ⬇️ ---
-
 const CRISP_IDENTIFIER = process.env.CRISP_IDENTIFIER;
 const CRISP_KEY = process.env.CRISP_KEY;
-const SLACK_WEBHOOK_URL_ENV = process.env.SLACK_WEBHOOK_URL;
-const CRISP_WEBSITE_ID = process.env.CRISP_WEBSITE_ID; // Note: This is now less relevant for multi-tenant logic but needed for auth.
 
 if (!CRISP_IDENTIFIER || !CRISP_KEY) {
     console.error("Missing required environment variables. Please set CRISP_IDENTIFIER and CRISP_KEY.");
     process.exit(1);
 }
 
-// **MODIFIED**: Function to load a specific website's config or return defaults.
 function loadPluginConfig(websiteId) {
     const filePath = getConfigFilePath(websiteId);
     try {
@@ -100,7 +94,6 @@ function loadPluginConfig(websiteId) {
     } catch (error) {
         console.error(`[${new Date().toISOString()}] Error reading config for ${websiteId}, using defaults:`, error);
     }
-    // Default values for a new or unconfigured website
     return {
         tagToApply: "profanity-alert",
         negativeThreshold: 0,
@@ -110,7 +103,6 @@ function loadPluginConfig(websiteId) {
     };
 }
 
-// **MODIFIED**: Function to save a specific website's config.
 function savePluginConfig(websiteId, config) {
     const filePath = getConfigFilePath(websiteId);
     try {
@@ -121,12 +113,28 @@ function savePluginConfig(websiteId, config) {
     }
 }
 
-// --- Plugin Config API (Multi-Tenant) ---
+// --- Plugin Endpoints ---
 
-/**
- * GET /api/config/:website_id
- * Returns the plugin config for a specific website.
- */
+// **FIXED**: Explicitly serve plugin files with corrected names.
+
+// Serve plugin.json, which Crisp needs to identify the plugin.
+app.get('/plugin.json', (req, res) => {
+    // Make sure 'plugin.json' is in your project's root directory.
+    res.sendFile(path.join(__dirname, 'plugin.json'));
+});
+
+// Serve the settings page. This path must match what you set in the Crisp Marketplace.
+app.get('/settings.html', (req, res) => {
+    // Make sure 'settings.html' is in your project's root directory.
+    res.sendFile(path.join(__dirname, 'settings.html'));
+});
+
+// A fallback for /settings in case the URL was configured without the .html extension.
+app.get('/settings', (req, res) => {
+    res.sendFile(path.join(__dirname, 'settings.html'));
+});
+
+
 app.get('/api/config/:website_id', (req, res) => {
     try {
         const { website_id } = req.params;
@@ -138,10 +146,6 @@ app.get('/api/config/:website_id', (req, res) => {
     }
 });
 
-/**
- * POST /api/config/:website_id
- * Saves the plugin config for a specific website.
- */
 app.post('/api/config/:website_id', (req, res) => {
     try {
         const { website_id } = req.params;
@@ -149,7 +153,6 @@ app.post('/api/config/:website_id', (req, res) => {
         const { tagToApply, negativeThreshold, slackEnabled, slackWebhookUrl, highlightProfanity } = req.body || {};
         let errors = [];
 
-        // Validate and build the new config
         const newConfig = { ...currentConfig };
 
         if (typeof tagToApply === "string" && tagToApply.trim().length > 0) {
@@ -195,17 +198,10 @@ app.post('/api/config/:website_id', (req, res) => {
     }
 });
 
-// --- ⬆️ END CONFIGURATION ⬆️ ---
-
-// Serve static plugin files
-app.use(express.static(__dirname));
-
-
 function getAuth() {
     return Buffer.from(`${CRISP_IDENTIFIER}:${CRISP_KEY}`).toString('base64');
 }
 
-// **MODIFIED**: Highlighting now depends on the config passed to it.
 function highlightProfanity(message, config) {
     if (!config.highlightProfanity) {
         return message;
@@ -222,13 +218,13 @@ function highlightProfanity(message, config) {
     return highlighted;
 }
 
-// (getAllProfanitiesInMessage and getSentimentSummary remain unchanged)
 function getAllProfanitiesInMessage(message) {
     if (typeof message !== 'string' || !message.length) return [];
     const profaneList = profanity.list.map(w => String(w).toLowerCase());
     const tokens = message.match(/\b\w+\b/g) || [];
     return tokens.filter(token => profaneList.includes(token.toLowerCase()));
 }
+
 function getSentimentSummary(score) {
     if (score <= -1) return "Very Negative";
     if (score < 0) return "Negative";
@@ -237,15 +233,29 @@ function getSentimentSummary(score) {
     return "Very Positive";
 }
 
-// **MODIFIED**: Slack notifications now depend on the config passed to it.
 async function sendSlackNotification(alertNote, sessionId, websiteId, config, alertDetails = {}) {
     if (!config.slackEnabled || !config.slackWebhookUrl) {
         console.log(`[${new Date().toISOString()}] Slack alerts disabled or Webhook URL not configured for ${websiteId}.`);
         return;
     }
     const crispLink = `https://app.crisp.chat/website/${websiteId}/inbox/${sessionId}/`;
-    // ... (rest of the function is the same, just uses the passed config)
-    const payload = { /* ... payload ... */ };
+    const { sentimentScore, sentimentSummary, profaneWords, messageTimestamp, userId } = alertDetails;
+    const contextFields = [];
+    if (typeof sentimentScore === "number") {
+        contextFields.push({ type: "mrkdwn", text: `*Sentiment Score:* ${sentimentScore.toFixed(2)} (${sentimentSummary || getSentimentSummary(sentimentScore)})` });
+    }
+    if (profaneWords && profaneWords.length) {
+        contextFields.push({ type: "mrkdwn", text: `*Profane Words:* ${profaneWords.map(w => `\`${w}\``).join(', ')}` });
+    }
+    const payload = {
+        text: "Negative & Profane Customer Message Detected",
+        blocks: [
+            { type: "header", text: { type: "plain_text", text: "🚨 Profanity & Negative Tone Detected", emoji: true } },
+            { type: "section", text: { type: "mrkdwn", text: alertNote.replace(/\*\*/g, '*') } },
+            ...(contextFields.length ? [{ type: "context", elements: contextFields }] : []),
+            { type: "actions", elements: [ { type: "button", text: { type: "plain_text", text: "View in Crisp", emoji: true }, style: "primary", url: crispLink } ] }
+        ]
+    };
      try {
         const response = await fetch(config.slackWebhookUrl, {
             method: 'POST',
@@ -262,68 +272,80 @@ async function sendSlackNotification(alertNote, sessionId, websiteId, config, al
     }
 }
 
+async function postPrivateNoteToCrisp(websiteId, sessionId, noteContent) {
+    const url = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/message`;
+    const payload = { type: "note", from: "operator", origin: "chat", content: noteContent };
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Basic ${getAuth()}`,
+                'X-Crisp-Tier': 'plugin'
+            },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            console.error(`[${new Date().toISOString()}] Failed to post note to Crisp:`, response.status, await response.text());
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error posting note to Crisp:`, error);
+    }
+}
+async function tagCrispConversation(websiteId, sessionId, tag) {
+    const metaUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/meta`;
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Basic ${getAuth()}`, 'X-Crisp-Tier': 'plugin' };
+    try {
+        const metaResponse = await fetch(metaUrl, { headers });
+        if (!metaResponse.ok) return;
+        const metadata = await metaResponse.json();
+        const existingSegments = metadata?.data?.segments || [];
+        if (existingSegments.includes(tag)) return;
+        const updatedSegments = [...existingSegments, tag];
+        await fetch(metaUrl, { method: 'PATCH', headers, body: JSON.stringify({ segments: updatedSegments }) });
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error tagging conversation:`, error);
+    }
+}
 
-// (postPrivateNoteToCrisp and tagCrispConversation remain largely unchanged but are called with config values)
-async function postPrivateNoteToCrisp(websiteId, sessionId, noteContent) { /* ... */ }
-async function tagCrispConversation(websiteId, sessionId, tag) { /* ... */ }
-
-
-/**
- * **MODIFIED**: Process a message using the specific config for its website_id.
- */
 async function processMessage(data) {
     try {
         const { website_id, session_id, content, user_id, timestamp } = data;
         if (!website_id || !session_id || typeof content !== 'string') {
-            console.warn(`[${new Date().toISOString()}] Invalid data received in webhook.`, data);
             return;
         }
 
-        // **MODIFIED**: Load the specific configuration for this website.
         const config = loadPluginConfig(website_id);
-
         const normalizedContent = content.replace(/[^a-zA-Z0-9\s]/g, '');
 
         if (profanity.exists(content) || profanity.exists(normalizedContent)) {
             const analysis = sentiment.analyze(content);
 
-            // **MODIFIED**: Use the threshold from the loaded config.
             if (analysis.comparative < config.negativeThreshold) {
                 console.log(`[${new Date().toISOString()}] Negative sentiment for ${website_id} (Score: ${analysis.comparative.toFixed(2)}). Triggering alert.`);
                 const profaneWords = getAllProfanitiesInMessage(content);
                 const uniqueProfaneWords = [...new Set(profaneWords)];
                 
-                // **MODIFIED**: Pass config to highlighting function.
                 const highlightedMessage = highlightProfanity(content, config);
                 const sentimentSummary = getSentimentSummary(analysis.comparative);
 
                 const note = [
                     "**Profanity & Negative Tone Alert**",
-                    `A customer message containing profanity and a negative tone was detected:`,
                     `> ${highlightedMessage}`,
                     "",
                     `*Sentiment Score:* ${analysis.comparative.toFixed(2)} (${sentimentSummary})`,
                     uniqueProfaneWords.length ? `*Profane Words Detected:* ${uniqueProfaneWords.map(w => `\`${w}\``).join(', ')}` : "",
-                    `*Session ID:* ${session_id}`,
-                    user_id ? `*User ID:* ${user_id}` : "",
-                    timestamp ? `*Timestamp:* ${new Date(timestamp).toISOString()}` : "",
                 ].filter(Boolean).join('\n');
 
                 await Promise.allSettled([
                     postPrivateNoteToCrisp(website_id, session_id, note),
-                    // **MODIFIED**: Pass website_id and loaded config to notification function.
                     sendSlackNotification(note, session_id, website_id, config, {
                         sentimentScore: analysis.comparative,
                         sentimentSummary,
                         profaneWords: uniqueProfaneWords,
-                        messageTimestamp: timestamp ? new Date(timestamp).toISOString() : undefined,
-                        userId: user_id
                     }),
-                    // **MODIFIED**: Use the tag from the loaded config.
                     tagCrispConversation(website_id, session_id, config.tagToApply)
                 ]);
-            } else {
-                console.log(`[${new Date().toISOString()}] Profanity found for ${website_id}, but sentiment is neutral/positive (Score: ${analysis.comparative.toFixed(2)}). No alert sent.`);
             }
         }
     } catch (error) {
@@ -331,7 +353,7 @@ async function processMessage(data) {
     }
 }
 
-// Webhook endpoint (logic is now in processMessage)
+// Webhook endpoint
 app.post('/webhook', async (req, res) => {
     res.sendStatus(200);
     try {
@@ -344,9 +366,13 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
-// Health check endpoint
+// Health check and root endpoints
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/', (req, res) => {
+    res.status(200).send('<h1>Crisp Tone & Profanity Detector Plugin</h1><p>Server is running. Health check available at <a href="/health">/health</a>.</p>');
 });
 
 // Start server
