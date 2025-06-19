@@ -43,6 +43,11 @@ const limiter = rateLimit({
     legacyHeaders: false,
 });
 app.use(limiter);
+// Serve plugin.json with correct content-type (Crisp compatibility)
+app.get("/plugin.json", (req, res) => {
+    res.type("application/json");
+    res.sendFile(path.join(__dirname, "public", "plugin.json"));
+});
 
 // Serve static plugin files (e.g. plugin.json)
 app.use(express.static(path.join(__dirname, "public")));
