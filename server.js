@@ -38,19 +38,18 @@ const sentiment = new Sentiment();
 
 app.set('trust proxy', 1);
 
-// **FIXED**: Updated Content Security Policy to allow embedding within the Crisp app.
+// **FIXED**: Broadened the Content Security Policy to use wildcards for Crisp domains.
+// This allows any subdomain of crisp.chat (e.g., app.crisp.chat, marketplace.crisp.chat)
+// to embed the plugin, which is a more robust solution.
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            // Allow scripts from Crisp's domains for proper functionality.
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://app.crisp.chat", "https://marketplace.crisp.chat"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://app.crisp.chat", "https://marketplace.crisp.chat"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "*.crisp.chat"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "*.crisp.chat"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            // Allow the settings page to be embedded in both the marketplace and the actual Crisp app.
-            frameAncestors: ["'self'", "https://app.crisp.chat", "https://marketplace.crisp.chat"],
-            // Ensure API calls can be made from the settings page when loaded in Crisp.
-            connectSrc: ["'self'", "https://app.crisp.chat", "https://marketplace.crisp.chat"],
+            frameAncestors: ["'self'", "*.crisp.chat"],
+            connectSrc: ["'self'", "*.crisp.chat"],
         }
     }
 }));
@@ -195,7 +194,7 @@ function highlightProfanity(message, config) {
         return message;
     }
     const profaneWords = getAllProfanitiesInMessage(message);
-    if (!Array.isArray(profaneWords) || profaneWords.length > 0) return message;
+    if (!Array.isArray(profaneWords) || profaneWords.length == 0) return message;
     const uniqueProfaneWords = [...new Set(profaneWords)];
     let highlighted = message;
     uniqueProfaneWords.forEach(word => {
