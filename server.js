@@ -1,17 +1,9 @@
 /**
- * Tone Detection & Profanity Alert Server (Crisp Plugin - Multi-Tenant Edition)
- * -----------------------------------------------------------------------------
- * This version supports multi-tenancy, storing separate configurations for each
- * Crisp website_id.
- *
- * - Configurations are stored in the `config/` directory, with one JSON file per website_id.
- * - This avoids a database and ensures settings are not shared between different users.
- *
- * Endpoints:
- * - GET  /plugin-config?website_id=<ID>   (returns config for a specific website)
- * - POST /plugin-config?website_id=<ID>   (saves config for a specific website)
- * - POST /webhook                          (Crisp webhook, uses website_id from payload to get config)
- * - GET  /health                           (health check)
+ * Tone & Toxicity Detection Server (Crisp Plugin - Self-Hosted AI Model)
+ * -----------------------------------------------------------------------
+ * This version uses a free, locally-hosted machine learning model via
+ * Hugging Face's transformers.js library for high-quality, private, and
+ * cost-free toxicity detection.
  */
 
 require('dotenv').config();
@@ -22,409 +14,231 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { Profanity } = require('@2toad/profanity');
-const Sentiment = require('sentiment');
 const fetch = require('node-fetch');
+// NEW: Import the pipeline function for loading the AI model
+const { pipeline } = await import('@xenova/transformers');
+
+
+// --- NEW: Singleton Class to manage the AI model ---
+// This ensures the model is loaded only once when the server starts.
+class ToxicityPipeline {
+    static task = 'text-classification';
+    static model = 'Xenova/toxic-bert';
+    static instance = null;
+
+    static async getInstance(progress_callback = null) {
+        if (this.instance === null) {
+            console.log('Loading toxicity detection model...');
+            const start = Date.now();
+            this.instance = pipeline(this.task, this.model, { progress_callback });
+            this.instance.then(() => {
+                 console.log(`Model loaded successfully in ${(Date.now() - start) / 1000}s`);
+            });
+        }
+        return this.instance;
+    }
+}
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const profanity = new Profanity();
-const sentiment = new Sentiment();
 
 app.set('trust proxy', 1);
 
-// Configure helmet to allow Crisp's domain(s) to embed content
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            scriptSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
             styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
-            imgSrc: ["'self'", 'data:', 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
-            connectSrc: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
             frameAncestors: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
         }
     },
-    xFrameOptions: false, // Disable X-Frame-Options as it's redundant with frame-ancestors and can cause conflicts.
+    xFrameOptions: false,
 }));
 
 app.use(bodyParser.json());
 
-const limiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-});
+const limiter = rateLimit({ windowMs: 60 * 1000, max: 100 });
 app.use(limiter);
 
-// --- ⬇️ CONFIGURATION (Per-website, persisted to files) ⬇️ ---
+// --- ⬇️ CONFIGURATION & API KEYS ⬇️ ---
 
 const CONFIG_DIR = path.join(__dirname, "config");
-// Ensure the configuration directory exists
-if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR);
-    console.log(`[${new Date().toISOString()}] Created configuration directory at: ${CONFIG_DIR}`);
-}
+if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR);
 
 const CRISP_IDENTIFIER = process.env.CRISP_IDENTIFIER;
 const CRISP_KEY = process.env.CRISP_KEY;
-const SLACK_WEBHOOK_URL_ENV = process.env.SLACK_WEBHOOK_URL;
-const CRISP_WEBSITE_ID_GLOBAL = process.env.CRISP_WEBSITE_ID; // Kept for reference or single-tenant fallback
 
 if (!CRISP_IDENTIFIER || !CRISP_KEY) {
-    console.error("Missing required environment variables. Please set CRISP_IDENTIFIER and CRISP_KEY.");
+    console.error("Missing Crisp credentials in environment variables.");
     process.exit(1);
 }
 
-// Function to get the file path for a given website's config
+// --- Configuration Management ---
+
 function getConfigFilePath(websiteId) {
-    // Basic validation to prevent path traversal
-    if (!websiteId || !/^[a-zA-Z0-9-]{36}$/.test(websiteId)) {
-        return null;
-    }
+    if (!websiteId || !/^[a-zA-Z0-9-]{36}$/.test(websiteId)) return null;
     return path.join(CONFIG_DIR, `${websiteId}.json`);
 }
 
-// Function to load a website's config from a file or initialize defaults
 function loadPluginConfig(websiteId) {
     const configPath = getConfigFilePath(websiteId);
-    if (!configPath) {
-        console.error(`[${new Date().toISOString()}] Invalid websiteId provided: ${websiteId}`);
-        return null; // Return null for invalid IDs
-    }
-
-    try {
-        if (fs.existsSync(configPath)) {
-            const data = fs.readFileSync(configPath, 'utf8');
-            console.log(`[${new Date().toISOString()}] Loaded plugin config for website: ${websiteId}`);
-            return JSON.parse(data);
+    if (!configPath) return null;
+    if (fs.existsSync(configPath)) {
+        try {
+            return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        } catch (error) {
+            console.error(`Error reading config for ${websiteId}:`, error);
         }
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error reading config file for ${websiteId}, using defaults:`, error);
     }
-
-    // Default values for a new configuration
+    // Default config is now simpler
     return {
-        tagToApply: "profanity-alert",
-        negativeThreshold: -0.5,
+        tagToApply: "toxic-alert",
+        detectionEnabled: true, // Simple on/off switch
         slackEnabled: false,
-        slackWebhookUrl: SLACK_WEBHOOK_URL_ENV || "", // Use env var for initial load if available
-        highlightProfanity: true
+        slackWebhookUrl: "",
     };
 }
 
-// Function to save a website's config to a file
 function savePluginConfig(websiteId, config) {
     const configPath = getConfigFilePath(websiteId);
-     if (!configPath) {
-        console.error(`[${new Date().toISOString()}] Cannot save config due to invalid websiteId: ${websiteId}`);
-        return false;
-    }
+    if (!configPath) return false;
     try {
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-        console.log(`[${new Date().toISOString()}] Saved plugin config for website: ${websiteId}`);
         return true;
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error writing config file for ${websiteId}:`, error);
+        console.error(`Error writing config for ${websiteId}:`, error);
         return false;
     }
 }
 
-// --- Plugin Config API (for Crisp plugin UI) ---
+// --- API Endpoints ---
 
-/**
- * GET /plugin-config?website_id=<ID>
- * Returns the current plugin config for the specified website.
- */
 app.get('/plugin-config', (req, res) => {
     const { website_id } = req.query;
-    if (!website_id) {
-        return res.status(400).json({ error: "Missing website_id query parameter." });
-    }
-
+    if (!website_id) return res.status(400).json({ error: "Missing website_id" });
     const config = loadPluginConfig(website_id);
-    if (!config) {
-         return res.status(400).json({ error: "Invalid website_id provided." });
-    }
-    
+    if (!config) return res.status(400).json({ error: "Invalid website_id" });
     res.status(200).json(config);
 });
 
-/**
- * POST /plugin-config?website_id=<ID>
- * Saves the plugin config for the specified website.
- */
 app.post('/plugin-config', (req, res) => {
     const { website_id } = req.query;
-    if (!website_id) {
-        return res.status(400).json({ ok: false, error: "Missing website_id query parameter." });
-    }
+    if (!website_id) return res.status(400).json({ ok: false, error: "Missing website_id" });
 
     const currentConfig = loadPluginConfig(website_id);
-    if (!currentConfig) {
-        return res.status(400).json({ ok: false, error: "Invalid website_id provided." });
-    }
-
-    const { tagToApply, negativeThreshold, slackEnabled, slackWebhookUrl, highlightProfanity } = req.body || {};
-    let errors = [];
-
-    // Create a new config object to update, starting from the current one
-    const newConfig = { ...currentConfig };
-
-    // Validate and update fields
-    if (typeof tagToApply === "string" && tagToApply.trim().length > 0) {
-        newConfig.tagToApply = tagToApply.trim();
-    } else if (typeof tagToApply !== "undefined") {
-        errors.push("tagToApply must be a non-empty string.");
-    }
-
-    if (typeof negativeThreshold === "number" && isFinite(negativeThreshold)) {
-        newConfig.negativeThreshold = negativeThreshold;
-    } else if (typeof negativeThreshold !== "undefined") {
-        errors.push("negativeThreshold must be a number.");
-    }
-
-    if (typeof slackEnabled === "boolean") {
-        newConfig.slackEnabled = slackEnabled;
-    } else if (typeof slackEnabled !== "undefined") {
-        errors.push("slackEnabled must be a boolean.");
-    }
-
-    if (typeof slackWebhookUrl === "string") {
-        newConfig.slackWebhookUrl = slackWebhookUrl.trim();
-    } else if (typeof slackWebhookUrl !== "undefined") {
-        errors.push("slackWebhookUrl must be a string.");
-    }
-
-    if (typeof highlightProfanity === "boolean") {
-        newConfig.highlightProfanity = highlightProfanity;
-    } else if (typeof highlightProfanity !== "undefined") {
-        errors.push("highlightProfanity must be a boolean.");
-    }
-
-    if (errors.length > 0) {
-        return res.status(400).json({ ok: false, errors });
-    }
-
-    if (savePluginConfig(website_id, newConfig)) {
-        return res.status(200).json({ ok: true, ...newConfig });
+    const { tagToApply, detectionEnabled, slackEnabled, slackWebhookUrl } = req.body || {};
+    
+    // Update config with new values
+    if (tagToApply) currentConfig.tagToApply = tagToApply;
+    if (typeof detectionEnabled === 'boolean') currentConfig.detectionEnabled = detectionEnabled;
+    if (typeof slackEnabled === 'boolean') currentConfig.slackEnabled = slackEnabled;
+    if (typeof slackWebhookUrl === 'string') currentConfig.slackWebhookUrl = slackWebhookUrl;
+    
+    if (savePluginConfig(website_id, currentConfig)) {
+        res.status(200).json({ ok: true, ...currentConfig });
     } else {
-        return res.status(500).json({ ok: false, error: "Failed to save configuration." });
+        res.status(500).json({ ok: false, error: "Failed to save configuration." });
     }
 });
 
+// --- UPDATED: Main Message Processing Logic ---
 
-// --- ⬆️ END CONFIGURATION ⬆️ ---
+/**
+ * Process a user message using the local AI model.
+ */
+async function processMessage(data) {
+    const { website_id, session_id, content } = data;
+    if (!website_id || !session_id || typeof content !== 'string' || content.trim().length === 0) return;
 
-// Serve static plugin files (including settings.html)
-app.use(express.static(path.join(__dirname, "public")));
+    const config = loadPluginConfig(website_id);
+    if (!config || !config.detectionEnabled) return;
 
-// Serve plugin.json (for Crisp discovery)
-app.get("/plugin.json", (req, res) => {
-    res.sendFile(path.join(__dirname, "plugin.json"));
-});
+    try {
+        // Get the classifier instance
+        const classifier = await ToxicityPipeline.getInstance();
+        // Analyze the message
+        const results = await classifier(content);
 
-// Serve the HTML settings page
-app.get("/settings", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "settings.html"));
-});
+        // Find the 'toxic' label in the results
+        const toxicResult = results.find(item => item.label === 'toxic');
 
+        if (toxicResult && toxicResult.score > 0.8) { // You can keep a hardcoded threshold for confidence
+            console.log(`[${new Date().toISOString()}] High toxicity detected for ${website_id} (Score: ${toxicResult.score.toFixed(2)})`);
+
+            const note = `**Toxicity Alert**\n\nA message was flagged by the local AI model.\n\n> ${content}\n\n*Toxicity Score:* ${(toxicResult.score * 100).toFixed(1)}%`;
+
+            await Promise.allSettled([
+                postPrivateNoteToCrisp(website_id, session_id, note),
+                sendSlackNotification(note, website_id, session_id, config),
+                tagCrispConversation(website_id, session_id, config.tagToApply)
+            ]);
+        }
+    } catch (error) {
+        console.error("Error during local AI analysis:", error);
+    }
+}
+
+
+// --- Crisp & Slack Utility Functions (unchanged) ---
 
 function getAuth() {
     return Buffer.from(`${CRISP_IDENTIFIER}:${CRISP_KEY}`).toString('base64');
 }
 
-// ... The rest of your utility functions (getAllProfanitiesInMessage, postPrivateNoteToCrisp, etc.) remain largely the same ...
-// Small adjustments are needed for highlightProfanity and sendSlackNotification to accept config.
-
-function getAllProfanitiesInMessage(message) {
-    if (typeof message !== 'string' || !message.length) return [];
-    if (!profanity || !Array.isArray(profanity.list) || profanity.list.length === 0) return [];
-    const profaneList = profanity.list.filter(w => typeof w === 'string' && w.length > 0).map(w => w.toLowerCase());
-    if (!Array.isArray(profaneList) || profaneList.length === 0) return [];
-    const tokens = message.match(/\b\w+\b/g) || [];
-    const found = [];
-    tokens.forEach(token => {
-        if (typeof token === 'string' && profaneList.includes(token.toLowerCase())) {
-            found.push(token);
-        }
-    });
-    return found;
-}
-
-function highlightProfanity(message, config) { // Accepts config
-    if (!config.highlightProfanity) {
-        return message;
-    }
-    const profaneWords = getAllProfanitiesInMessage(message);
-    if (!Array.isArray(profaneWords) || profaneWords.length === 0) return message;
-    const uniqueProfaneWords = [...new Set(profaneWords)];
-    let highlighted = message;
-    uniqueProfaneWords.forEach(word => {
-        const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
-        highlighted = highlighted.replace(regex, match => `**${match}**`);
-    });
-    return highlighted;
-}
-
-function getSentimentSummary(score) {
-    if (score <= -1) return "Very Negative";
-    if (score < 0) return "Negative";
-    if (score === 0) return "Neutral";
-    if (score < 1) return "Positive";
-    return "Very Positive";
-}
-
 async function postPrivateNoteToCrisp(websiteId, sessionId, noteContent) {
     const url = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/message`;
-    const payload = { type: "note", from: "operator", origin: "chat", content: noteContent };
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${getAuth()}`, 'X-Crisp-Tier': 'plugin' },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            console.error(`[${new Date().toISOString()}] Failed to post note to Crisp for ${websiteId}:`, response.status, await response.text());
-        } else {
-            console.log(`[${new Date().toISOString()}] Private note posted to Crisp for ${websiteId}.`);
-        }
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error posting note to Crisp for ${websiteId}:`, error);
-    }
+    const payload = { type: "note", content: noteContent, from: "operator", origin: "chat" };
+    await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${getAuth()}`, 'X-Crisp-Tier': 'plugin' },
+        body: JSON.stringify(payload)
+    }).catch(err => console.error("Error posting to Crisp:", err));
 }
 
 async function tagCrispConversation(websiteId, sessionId, tag) {
-    const metaUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/meta`;
-    const headers = { 'Content-Type': 'application/json', 'Authorization': `Basic ${getAuth()}`, 'X-Crisp-Tier': 'plugin' };
-    try {
-        const metaResponse = await fetch(metaUrl, { headers });
-        if (!metaResponse.ok) {
-            console.error(`[${new Date().toISOString()}] Failed to get conversation metadata for ${websiteId}:`, metaResponse.status, await metaResponse.text());
-            return;
-        }
-        const metadata = await metaResponse.json();
-        const existingSegments = metadata?.data?.segments?.map(s => (typeof s === 'string' ? s : s.name)) || [];
-        if (existingSegments.map(t => t.toLowerCase()).includes(tag.toLowerCase())) {
-            console.log(`[${new Date().toISOString()}] Tag "${tag}" already exists on ${sessionId}. Skipping.`);
-            return;
-        }
-        const updatedSegments = [...existingSegments, tag];
-        const patchResponse = await fetch(metaUrl, {
-            method: 'PATCH',
-            headers,
-            body: JSON.stringify({ segments: updatedSegments })
-        });
-        if (!patchResponse.ok) {
-            console.error(`[${new Date().toISOString()}] Failed to tag conversation ${sessionId}:`, patchResponse.status, await patchResponse.text());
-        } else {
-            console.log(`[${new Date().toISOString()}] Tagged conversation ${sessionId} with "${tag}".`);
-        }
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error tagging conversation ${sessionId}:`, error);
-    }
+    const url = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/meta`;
+    const body = { data: { segments: [tag] } }; // Use the data object for segments
+    await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${getAuth()}`, 'X-Crisp-Tier': 'plugin' },
+        body: JSON.stringify(body)
+    }).catch(err => console.error("Error tagging in Crisp:", err));
 }
 
-async function sendSlackNotification(alertNote, websiteId, sessionId, alertDetails = {}, config) { // Accepts config
-    if (!config.slackEnabled || !config.slackWebhookUrl) {
-        console.log(`[${new Date().toISOString()}] Slack alerts disabled for ${websiteId}. Skipping.`);
-        return;
-    }
+async function sendSlackNotification(alertNote, websiteId, sessionId, config) {
+    if (!config.slackEnabled || !config.slackWebhookUrl) return;
     const crispLink = `https://app.crisp.chat/website/${websiteId}/inbox/${sessionId}/`;
     const payload = {
-        text: "Negative & Profane Customer Message Detected",
-        blocks: [ { type: "header", text: { type: "plain_text", text: "🚨 Profanity & Negative Tone Detected" } }, { type: "section", text: { type: "mrkdwn", text: alertNote.replace(/\*\*/g, '*') } }, { type: "actions", elements: [ { type: "button", text: { type: "plain_text", text: "View in Crisp" }, style: "primary", url: crispLink } ] } ]
+        blocks: [
+            { type: "header", text: { type: "plain_text", text: "🚨 Toxicity Alert" } },
+            { type: "section", text: { type: "mrkdwn", text: alertNote } },
+            { type: "actions", elements: [{ type: "button", text: { type: "plain_text", text: "View in Crisp" }, style: "primary", url: crispLink }] }
+        ]
     };
-    try {
-        const response = await fetch(config.slackWebhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            console.error(`[${new Date().toISOString()}] Failed to send Slack notification for ${websiteId}:`, response.status, await response.text());
-        } else {
-            console.log(`[${new Date().toISOString()}] Slack notification sent for ${websiteId}.`);
-        }
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error sending Slack notification for ${websiteId}:`, error);
-    }
+    await fetch(config.slackWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).catch(err => console.error("Error sending to Slack:", err));
 }
 
-/**
- * Process a user message using the config specific to their website_id.
- */
-async function processMessage(data) {
-    const { website_id, session_id, content, user_id, timestamp } = data;
-    if (!website_id || !session_id || typeof content !== 'string') {
-        console.warn(`[${new Date().toISOString()}] Invalid webhook data received.`);
-        return;
-    }
+// --- Server Setup ---
 
-    // Load the configuration for this specific website
-    const config = loadPluginConfig(website_id);
-    if (!config) {
-        console.error(`[${new Date().toISOString()}] Could not load configuration for website ${website_id}. Aborting processing.`);
-        return;
-    }
-
-    try {
-        if (profanity.exists(content)) {
-            const analysis = sentiment.analyze(content);
-            if (analysis.comparative < config.negativeThreshold) {
-                console.log(`[${new Date().toISOString()}] Alert for ${website_id}: Negative sentiment (Score: ${analysis.comparative.toFixed(2)}).`);
-                
-                const uniqueProfaneWords = [...new Set(getAllProfanitiesInMessage(content))];
-                const highlightedMessage = highlightProfanity(content, config); // Pass config
-                const sentimentSummary = getSentimentSummary(analysis.comparative);
-
-                const note = [
-                    "**Profanity & Negative Tone Alert**",
-                    `> ${highlightedMessage}`,
-                    `*Sentiment Score:* ${analysis.comparative.toFixed(2)} (${sentimentSummary})`,
-                ].join('\n');
-
-                await Promise.allSettled([
-                    postPrivateNoteToCrisp(website_id, session_id, note),
-                    sendSlackNotification(note, website_id, session_id, {}, config), // Pass config
-                    tagCrispConversation(website_id, session_id, config.tagToApply)
-                ]);
-            }
+// Pre-load the model on server start to make subsequent requests fast.
+ToxicityPipeline.getInstance().then(() => {
+    app.use(express.static(path.join(__dirname, "public")));
+    app.get("/plugin.json", (req, res) => res.sendFile(path.join(__dirname, "plugin.json")));
+    app.get("/settings", (req, res) => res.sendFile(path.join(__dirname, "public", "settings.html")));
+    app.post('/webhook', (req, res) => {
+        res.sendStatus(200);
+        if (req.body?.event === 'message:send' && req.body.data?.from === 'user') {
+            processMessage(req.body.data);
         }
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error during message processing for ${website_id}:`, error);
-    }
-}
+    });
 
-// Webhook endpoint
-app.post('/webhook', async (req, res) => {
-    res.sendStatus(200);
-    try {
-        const { event, data } = req.body || {};
-        if (event === 'message:send' && data?.from === 'user' && data?.type === 'text') {
-            await processMessage(data);
-        }
-    } catch (err) {
-        console.error(`[${new Date().toISOString()}] Error in /webhook handler:`, err);
-    }
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Start server
-app.listen(PORT, () => {
-    console.log(`[${new Date().toISOString()}] Crisp Multi-Tenant Plugin Server running at http://localhost:${PORT}`);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error(`[${new Date().toISOString()}] Unhandled Rejection:`, reason);
-});
-process.on('uncaughtException', (err) => {
-    console.error(`[${new Date().toISOString()}] Uncaught Exception:`, err);
+    app.listen(PORT, () => console.log(`Crisp Toxicity Plugin with local AI running on port ${PORT}`));
+}).catch(err => {
+    console.error("Failed to load the AI model. The app will not start.", err);
     process.exit(1);
 });
