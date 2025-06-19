@@ -1,22 +1,17 @@
 /**
- * Tone Detection & Profanity Alert Server (Multi-Tenant Crisp Plugin)
- * -------------------------------------------------------------------
- * This version supports multiple tenants (Crisp websites) by storing
- * configuration on a per-website_id basis.
+ * Tone Detection & Profanity Alert Server (Crisp Plugin - Multi-Tenant Edition)
+ * -----------------------------------------------------------------------------
+ * This version supports multi-tenancy, storing separate configurations for each
+ * Crisp website_id.
  *
- * Changes:
- * - Configuration is stored in a `data/` directory, with one JSON file per website_id.
- * - API endpoints are now /api/config/:website_id.
- * - The webhook processor loads the specific configuration for the incoming website_id.
- * - This prevents settings from one user from overwriting another's.
+ * - Configurations are stored in the `config/` directory, with one JSON file per website_id.
+ * - This avoids a database and ensures settings are not shared between different users.
  *
  * Endpoints:
- * - GET  /plugin.json              (serves the plugin manifest)
- * - GET  /settings.html            (serves the plugin settings page)
- * - GET  /api/config/:website_id   (returns config for a specific website)
- * - POST /api/config/:website_id   (saves config for a specific website)
- * - POST /webhook                  (Crisp webhook, now multi-tenant aware)
- * - GET  /health                   (health check)
+ * - GET  /plugin-config?website_id=<ID>   (returns config for a specific website)
+ * - POST /plugin-config?website_id=<ID>   (saves config for a specific website)
+ * - POST /webhook                          (Crisp webhook, uses website_id from payload to get config)
+ * - GET  /health                           (health check)
  */
 
 require('dotenv').config();
@@ -38,18 +33,16 @@ const sentiment = new Sentiment();
 
 app.set('trust proxy', 1);
 
-// **FIXED**: Broadened the Content Security Policy to use wildcards for Crisp domains.
-// This allows any subdomain of crisp.chat (e.g., app.crisp.chat, marketplace.crisp.chat)
-// to embed the plugin, which is a more robust solution.
+// Configure helmet to allow Crisp's domain(s) to embed content
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "*.crisp.chat"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "*.crisp.chat"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            frameAncestors: ["'self'", "*.crisp.chat"],
-            connectSrc: ["'self'", "*.crisp.chat"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            imgSrc: ["'self'", 'data:', 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            connectSrc: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
+            frameAncestors: ["'self'", 'https://app.crisp.chat', 'https://marketplace.crisp.chat'],
         }
     }
 }));
@@ -64,137 +57,207 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Serve static files (plugin.json, settings.html) from the 'public' directory.
-app.use(express.static(path.join(__dirname, 'public')));
+// --- ⬇️ CONFIGURATION (Per-website, persisted to files) ⬇️ ---
 
-
-const DATA_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR);
-    console.log(`[${new Date().toISOString()}] Created data directory at: ${DATA_DIR}`);
-}
-
-function getConfigFilePath(websiteId) {
-    const safeWebsiteId = path.basename(websiteId);
-    if (!safeWebsiteId || safeWebsiteId === '.' || safeWebsiteId === '..') {
-        throw new Error("Invalid website_id provided.");
-    }
-    return path.join(DATA_DIR, `${safeWebsiteId}.json`);
+const CONFIG_DIR = path.join(__dirname, "config");
+// Ensure the configuration directory exists
+if (!fs.existsSync(CONFIG_DIR)) {
+    fs.mkdirSync(CONFIG_DIR);
+    console.log(`[${new Date().toISOString()}] Created configuration directory at: ${CONFIG_DIR}`);
 }
 
 const CRISP_IDENTIFIER = process.env.CRISP_IDENTIFIER;
 const CRISP_KEY = process.env.CRISP_KEY;
+const SLACK_WEBHOOK_URL_ENV = process.env.SLACK_WEBHOOK_URL;
+const CRISP_WEBSITE_ID_GLOBAL = process.env.CRISP_WEBSITE_ID; // Kept for reference or single-tenant fallback
 
 if (!CRISP_IDENTIFIER || !CRISP_KEY) {
     console.error("Missing required environment variables. Please set CRISP_IDENTIFIER and CRISP_KEY.");
     process.exit(1);
 }
 
+// Function to get the file path for a given website's config
+function getConfigFilePath(websiteId) {
+    // Basic validation to prevent path traversal
+    if (!websiteId || !/^[a-zA-Z0-9-]{36}$/.test(websiteId)) {
+        return null;
+    }
+    return path.join(CONFIG_DIR, `${websiteId}.json`);
+}
+
+// Function to load a website's config from a file or initialize defaults
 function loadPluginConfig(websiteId) {
-    const filePath = getConfigFilePath(websiteId);
+    const configPath = getConfigFilePath(websiteId);
+    if (!configPath) {
+        console.error(`[${new Date().toISOString()}] Invalid websiteId provided: ${websiteId}`);
+        return null; // Return null for invalid IDs
+    }
+
     try {
-        if (fs.existsSync(filePath)) {
-            const data = fs.readFileSync(filePath, 'utf8');
-            console.log(`[${new Date().toISOString()}] Loaded plugin config for website_id: ${websiteId}`);
+        if (fs.existsSync(configPath)) {
+            const data = fs.readFileSync(configPath, 'utf8');
+            console.log(`[${new Date().toISOString()}] Loaded plugin config for website: ${websiteId}`);
             return JSON.parse(data);
         }
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error reading config for ${websiteId}, using defaults:`, error);
+        console.error(`[${new Date().toISOString()}] Error reading config file for ${websiteId}, using defaults:`, error);
     }
+
+    // Default values for a new configuration
     return {
         tagToApply: "profanity-alert",
-        negativeThreshold: 0,
+        negativeThreshold: -0.5,
         slackEnabled: false,
-        slackWebhookUrl: "",
+        slackWebhookUrl: SLACK_WEBHOOK_URL_ENV || "", // Use env var for initial load if available
         highlightProfanity: true
     };
 }
 
+// Function to save a website's config to a file
 function savePluginConfig(websiteId, config) {
-    const filePath = getConfigFilePath(websiteId);
+    const configPath = getConfigFilePath(websiteId);
+     if (!configPath) {
+        console.error(`[${new Date().toISOString()}] Cannot save config due to invalid websiteId: ${websiteId}`);
+        return false;
+    }
     try {
-        fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf8');
-        console.log(`[${new Date().toISOString()}] Saved plugin config for website_id: ${websiteId}`);
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        console.log(`[${new Date().toISOString()}] Saved plugin config for website: ${websiteId}`);
+        return true;
     } catch (error) {
         console.error(`[${new Date().toISOString()}] Error writing config file for ${websiteId}:`, error);
+        return false;
     }
 }
 
-// --- API Endpoints ---
+// --- Plugin Config API (for Crisp plugin UI) ---
 
-app.get('/api/config/:website_id', (req, res) => {
-    try {
-        const { website_id } = req.params;
-        const config = loadPluginConfig(website_id);
-        res.status(200).json(config);
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error in GET /api/config:`, error);
-        res.status(400).json({ ok: false, error: error.message });
+/**
+ * GET /plugin-config?website_id=<ID>
+ * Returns the current plugin config for the specified website.
+ */
+app.get('/plugin-config', (req, res) => {
+    const { website_id } = req.query;
+    if (!website_id) {
+        return res.status(400).json({ error: "Missing website_id query parameter." });
     }
+
+    const config = loadPluginConfig(website_id);
+    if (!config) {
+         return res.status(400).json({ error: "Invalid website_id provided." });
+    }
+    
+    res.status(200).json(config);
 });
 
-app.post('/api/config/:website_id', (req, res) => {
-    try {
-        const { website_id } = req.params;
-        const currentConfig = loadPluginConfig(website_id);
-        const { tagToApply, negativeThreshold, slackEnabled, slackWebhookUrl, highlightProfanity } = req.body || {};
-        let errors = [];
+/**
+ * POST /plugin-config?website_id=<ID>
+ * Saves the plugin config for the specified website.
+ */
+app.post('/plugin-config', (req, res) => {
+    const { website_id } = req.query;
+    if (!website_id) {
+        return res.status(400).json({ ok: false, error: "Missing website_id query parameter." });
+    }
 
-        const newConfig = { ...currentConfig };
+    const currentConfig = loadPluginConfig(website_id);
+    if (!currentConfig) {
+        return res.status(400).json({ ok: false, error: "Invalid website_id provided." });
+    }
 
-        if (typeof tagToApply === "string" && tagToApply.trim().length > 0) {
-            newConfig.tagToApply = tagToApply.trim();
-        } else if (typeof tagToApply !== "undefined") {
-            errors.push("tagToApply must be a non-empty string.");
-        }
+    const { tagToApply, negativeThreshold, slackEnabled, slackWebhookUrl, highlightProfanity } = req.body || {};
+    let errors = [];
 
-        if (typeof negativeThreshold === "number" && isFinite(negativeThreshold)) {
-            newConfig.negativeThreshold = negativeThreshold;
-        } else if (typeof negativeThreshold !== "undefined") {
-            errors.push("negativeThreshold must be a number.");
-        }
+    // Create a new config object to update, starting from the current one
+    const newConfig = { ...currentConfig };
 
-        if (typeof slackEnabled === "boolean") {
-            newConfig.slackEnabled = slackEnabled;
-        } else if (typeof slackEnabled !== "undefined") {
-            errors.push("slackEnabled must be a boolean.");
-        }
+    // Validate and update fields
+    if (typeof tagToApply === "string" && tagToApply.trim().length > 0) {
+        newConfig.tagToApply = tagToApply.trim();
+    } else if (typeof tagToApply !== "undefined") {
+        errors.push("tagToApply must be a non-empty string.");
+    }
 
-        if (typeof slackWebhookUrl === "string") {
-            newConfig.slackWebhookUrl = slackWebhookUrl.trim();
-        } else if (typeof slackWebhookUrl !== "undefined") {
-            errors.push("slackWebhookUrl must be a string.");
-        }
+    if (typeof negativeThreshold === "number" && isFinite(negativeThreshold)) {
+        newConfig.negativeThreshold = negativeThreshold;
+    } else if (typeof negativeThreshold !== "undefined") {
+        errors.push("negativeThreshold must be a number.");
+    }
 
-        if (typeof highlightProfanity === "boolean") {
-            newConfig.highlightProfanity = highlightProfanity;
-        } else if (typeof highlightProfanity !== "undefined") {
-            errors.push("highlightProfanity must be a boolean.");
-        }
+    if (typeof slackEnabled === "boolean") {
+        newConfig.slackEnabled = slackEnabled;
+    } else if (typeof slackEnabled !== "undefined") {
+        errors.push("slackEnabled must be a boolean.");
+    }
 
-        if (errors.length > 0) {
-            return res.status(400).json({ ok: false, errors });
-        }
+    if (typeof slackWebhookUrl === "string") {
+        newConfig.slackWebhookUrl = slackWebhookUrl.trim();
+    } else if (typeof slackWebhookUrl !== "undefined") {
+        errors.push("slackWebhookUrl must be a string.");
+    }
 
-        savePluginConfig(website_id, newConfig);
+    if (typeof highlightProfanity === "boolean") {
+        newConfig.highlightProfanity = highlightProfanity;
+    } else if (typeof highlightProfanity !== "undefined") {
+        errors.push("highlightProfanity must be a boolean.");
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({ ok: false, errors });
+    }
+
+    if (savePluginConfig(website_id, newConfig)) {
         return res.status(200).json({ ok: true, ...newConfig });
-
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error in POST /api/config:`, error);
-        res.status(400).json({ ok: false, error: error.message });
+    } else {
+        return res.status(500).json({ ok: false, error: "Failed to save configuration." });
     }
 });
+
+
+// --- ⬆️ END CONFIGURATION ⬆️ ---
+
+// Serve static plugin files (including settings.html)
+app.use(express.static(path.join(__dirname, "public")));
+
+// Serve plugin.json (for Crisp discovery)
+app.get("/plugin.json", (req, res) => {
+    res.sendFile(path.join(__dirname, "plugin.json"));
+});
+
+// Serve the HTML settings page (if requested directly, though typically handled by static middleware)
+app.get("/settings.html", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "settings.html"));
+});
+
 
 function getAuth() {
     return Buffer.from(`${CRISP_IDENTIFIER}:${CRISP_KEY}`).toString('base64');
 }
 
-function highlightProfanity(message, config) {
+// ... The rest of your utility functions (getAllProfanitiesInMessage, postPrivateNoteToCrisp, etc.) remain largely the same ...
+// Small adjustments are needed for highlightProfanity and sendSlackNotification to accept config.
+
+function getAllProfanitiesInMessage(message) {
+    if (typeof message !== 'string' || !message.length) return [];
+    if (!profanity || !Array.isArray(profanity.list) || profanity.list.length === 0) return [];
+    const profaneList = profanity.list.filter(w => typeof w === 'string' && w.length > 0).map(w => w.toLowerCase());
+    if (!Array.isArray(profaneList) || profaneList.length === 0) return [];
+    const tokens = message.match(/\b\w+\b/g) || [];
+    const found = [];
+    tokens.forEach(token => {
+        if (typeof token === 'string' && profaneList.includes(token.toLowerCase())) {
+            found.push(token);
+        }
+    });
+    return found;
+}
+
+function highlightProfanity(message, config) { // Accepts config
     if (!config.highlightProfanity) {
         return message;
     }
     const profaneWords = getAllProfanitiesInMessage(message);
-    if (!Array.isArray(profaneWords) || profaneWords.length == 0) return message;
+    if (!Array.isArray(profaneWords) || profaneWords.length === 0) return message;
     const uniqueProfaneWords = [...new Set(profaneWords)];
     let highlighted = message;
     uniqueProfaneWords.forEach(word => {
@@ -205,13 +268,6 @@ function highlightProfanity(message, config) {
     return highlighted;
 }
 
-function getAllProfanitiesInMessage(message) {
-    if (typeof message !== 'string' || !message.length) return [];
-    const profaneList = profanity.list.map(w => String(w).toLowerCase());
-    const tokens = message.match(/\b\w+\b/g) || [];
-    return tokens.filter(token => profaneList.includes(token.toLowerCase()));
-}
-
 function getSentimentSummary(score) {
     if (score <= -1) return "Very Negative";
     if (score < 0) return "Negative";
@@ -220,30 +276,67 @@ function getSentimentSummary(score) {
     return "Very Positive";
 }
 
-async function sendSlackNotification(alertNote, sessionId, websiteId, config, alertDetails = {}) {
+async function postPrivateNoteToCrisp(websiteId, sessionId, noteContent) {
+    const url = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/message`;
+    const payload = { type: "note", from: "operator", origin: "chat", content: noteContent };
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${getAuth()}`, 'X-Crisp-Tier': 'plugin' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            console.error(`[${new Date().toISOString()}] Failed to post note to Crisp for ${websiteId}:`, response.status, await response.text());
+        } else {
+            console.log(`[${new Date().toISOString()}] Private note posted to Crisp for ${websiteId}.`);
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error posting note to Crisp for ${websiteId}:`, error);
+    }
+}
+
+async function tagCrispConversation(websiteId, sessionId, tag) {
+    const metaUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/meta`;
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Basic ${getAuth()}`, 'X-Crisp-Tier': 'plugin' };
+    try {
+        const metaResponse = await fetch(metaUrl, { headers });
+        if (!metaResponse.ok) {
+            console.error(`[${new Date().toISOString()}] Failed to get conversation metadata for ${websiteId}:`, metaResponse.status, await metaResponse.text());
+            return;
+        }
+        const metadata = await metaResponse.json();
+        const existingSegments = metadata?.data?.segments?.map(s => (typeof s === 'string' ? s : s.name)) || [];
+        if (existingSegments.map(t => t.toLowerCase()).includes(tag.toLowerCase())) {
+            console.log(`[${new Date().toISOString()}] Tag "${tag}" already exists on ${sessionId}. Skipping.`);
+            return;
+        }
+        const updatedSegments = [...existingSegments, tag];
+        const patchResponse = await fetch(metaUrl, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ segments: updatedSegments })
+        });
+        if (!patchResponse.ok) {
+            console.error(`[${new Date().toISOString()}] Failed to tag conversation ${sessionId}:`, patchResponse.status, await patchResponse.text());
+        } else {
+            console.log(`[${new Date().toISOString()}] Tagged conversation ${sessionId} with "${tag}".`);
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error tagging conversation ${sessionId}:`, error);
+    }
+}
+
+async function sendSlackNotification(alertNote, websiteId, sessionId, alertDetails = {}, config) { // Accepts config
     if (!config.slackEnabled || !config.slackWebhookUrl) {
-        console.log(`[${new Date().toISOString()}] Slack alerts disabled or Webhook URL not configured for ${websiteId}.`);
+        console.log(`[${new Date().toISOString()}] Slack alerts disabled for ${websiteId}. Skipping.`);
         return;
     }
     const crispLink = `https://app.crisp.chat/website/${websiteId}/inbox/${sessionId}/`;
-    const { sentimentScore, sentimentSummary, profaneWords, messageTimestamp, userId } = alertDetails;
-    const contextFields = [];
-    if (typeof sentimentScore === "number") {
-        contextFields.push({ type: "mrkdwn", text: `*Sentiment Score:* ${sentimentScore.toFixed(2)} (${sentimentSummary || getSentimentSummary(sentimentScore)})` });
-    }
-    if (profaneWords && profaneWords.length) {
-        contextFields.push({ type: "mrkdwn", text: `*Profane Words:* ${profaneWords.map(w => `\`${w}\``).join(', ')}` });
-    }
     const payload = {
         text: "Negative & Profane Customer Message Detected",
-        blocks: [
-            { type: "header", text: { type: "plain_text", text: "🚨 Profanity & Negative Tone Detected", emoji: true } },
-            { type: "section", text: { type: "mrkdwn", text: alertNote.replace(/\*\*/g, '*') } },
-            ...(contextFields.length ? [{ type: "context", elements: contextFields }] : []),
-            { type: "actions", elements: [ { type: "button", text: { type: "plain_text", text: "View in Crisp", emoji: true }, style: "primary", url: crispLink } ] }
-        ]
+        blocks: [ { type: "header", text: { type: "plain_text", text: "🚨 Profanity & Negative Tone Detected" } }, { type: "section", text: { type: "mrkdwn", text: alertNote.replace(/\*\*/g, '*') } }, { type: "actions", elements: [ { type: "button", text: { type: "plain_text", text: "View in Crisp" }, style: "primary", url: crispLink } ] } ]
     };
-     try {
+    try {
         const response = await fetch(config.slackWebhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -259,84 +352,48 @@ async function sendSlackNotification(alertNote, sessionId, websiteId, config, al
     }
 }
 
-async function postPrivateNoteToCrisp(websiteId, sessionId, noteContent) {
-    const url = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/message`;
-    const payload = { type: "note", from: "operator", origin: "chat", content: noteContent };
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Basic ${getAuth()}`,
-                'X-Crisp-Tier': 'plugin'
-            },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            console.error(`[${new Date().toISOString()}] Failed to post note to Crisp:`, response.status, await response.text());
-        }
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error posting note to Crisp:`, error);
-    }
-}
-async function tagCrispConversation(websiteId, sessionId, tag) {
-    const metaUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/meta`;
-    const headers = { 'Content-Type': 'application/json', 'Authorization': `Basic ${getAuth()}`, 'X-Crisp-Tier': 'plugin' };
-    try {
-        const metaResponse = await fetch(metaUrl, { headers });
-        if (!metaResponse.ok) return;
-        const metadata = await metaResponse.json();
-        const existingSegments = metadata?.data?.segments || [];
-        if (existingSegments.includes(tag)) return;
-        const updatedSegments = [...existingSegments, tag];
-        await fetch(metaUrl, { method: 'PATCH', headers, body: JSON.stringify({ segments: updatedSegments }) });
-    } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error tagging conversation:`, error);
-    }
-}
-
+/**
+ * Process a user message using the config specific to their website_id.
+ */
 async function processMessage(data) {
+    const { website_id, session_id, content, user_id, timestamp } = data;
+    if (!website_id || !session_id || typeof content !== 'string') {
+        console.warn(`[${new Date().toISOString()}] Invalid webhook data received.`);
+        return;
+    }
+
+    // Load the configuration for this specific website
+    const config = loadPluginConfig(website_id);
+    if (!config) {
+        console.error(`[${new Date().toISOString()}] Could not load configuration for website ${website_id}. Aborting processing.`);
+        return;
+    }
+
     try {
-        const { website_id, session_id, content, user_id, timestamp } = data;
-        if (!website_id || !session_id || typeof content !== 'string') {
-            return;
-        }
-
-        const config = loadPluginConfig(website_id);
-        const normalizedContent = content.replace(/[^a-zA-Z0-9\s]/g, '');
-
-        if (profanity.exists(content) || profanity.exists(normalizedContent)) {
+        if (profanity.exists(content)) {
             const analysis = sentiment.analyze(content);
-
             if (analysis.comparative < config.negativeThreshold) {
-                console.log(`[${new Date().toISOString()}] Negative sentiment for ${website_id} (Score: ${analysis.comparative.toFixed(2)}). Triggering alert.`);
-                const profaneWords = getAllProfanitiesInMessage(content);
-                const uniqueProfaneWords = [...new Set(profaneWords)];
+                console.log(`[${new Date().toISOString()}] Alert for ${website_id}: Negative sentiment (Score: ${analysis.comparative.toFixed(2)}).`);
                 
-                const highlightedMessage = highlightProfanity(content, config);
+                const uniqueProfaneWords = [...new Set(getAllProfanitiesInMessage(content))];
+                const highlightedMessage = highlightProfanity(content, config); // Pass config
                 const sentimentSummary = getSentimentSummary(analysis.comparative);
 
                 const note = [
                     "**Profanity & Negative Tone Alert**",
                     `> ${highlightedMessage}`,
-                    "",
                     `*Sentiment Score:* ${analysis.comparative.toFixed(2)} (${sentimentSummary})`,
-                    uniqueProfaneWords.length ? `*Profane Words Detected:* ${uniqueProfaneWords.map(w => `\`${w}\``).join(', ')}` : "",
-                ].filter(Boolean).join('\n');
+                ].join('\n');
 
                 await Promise.allSettled([
                     postPrivateNoteToCrisp(website_id, session_id, note),
-                    sendSlackNotification(note, session_id, website_id, config, {
-                        sentimentScore: analysis.comparative,
-                        sentimentSummary,
-                        profaneWords: uniqueProfaneWords,
-                    }),
+                    sendSlackNotification(note, website_id, session_id, {}, config), // Pass config
                     tagCrispConversation(website_id, session_id, config.tagToApply)
                 ]);
             }
         }
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error during message processing:`, error);
+        console.error(`[${new Date().toISOString()}] Error during message processing for ${website_id}:`, error);
     }
 }
 
@@ -345,26 +402,22 @@ app.post('/webhook', async (req, res) => {
     res.sendStatus(200);
     try {
         const { event, data } = req.body || {};
-        if (event === 'message:send' && data && data.from === 'user' && data.type === 'text') {
+        if (event === 'message:send' && data?.from === 'user' && data?.type === 'text') {
             await processMessage(data);
         }
     } catch (err) {
-        console.error(`[${new Date().toISOString()}] Error in /webhook handler:`, err);
+        console.error(`[${new D ate().toISOString()}] Error in /webhook handler:`, err);
     }
 });
 
-// Health check and root endpoints
+// Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.get('/', (req, res) => {
-    res.status(200).send('<h1>Crisp Tone & Profanity Detector Plugin</h1><p>Server is running. Health check available at <a href="/health">/health</a>.</p>');
-});
-
 // Start server
 app.listen(PORT, () => {
-    console.log(`[${new Date().toISOString()}] Crisp Multi-Tenant Plugin running at http://localhost:${PORT}`);
+    console.log(`[${new Date().toISOString()}] Crisp Multi-Tenant Plugin Server running at http://localhost:${PORT}`);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
