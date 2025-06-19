@@ -1,7 +1,7 @@
 {
   "id": "tone-profanity-detector",
   "name": "Tone & Profanity Detector",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Detects customer messages with rude or negative tone. Tags, notifies, and alerts your team.",
   "website_url": "https://crisp-tone-plugin.onrender.com",
   "api_url": "https://crisp-tone-plugin.onrender.com",
@@ -41,8 +41,8 @@
           "label": "Highlight Profanity in Notes"
         }
       ],
-      "load_url": "/plugin-config",
-      "submit_url": "/plugin-config",
+      "load_url": "/api/config/{website.id}",
+      "submit_url": "/api/config/{website.id}",
       "method": "POST"
     }
   }
