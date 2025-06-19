@@ -33,19 +33,16 @@ app.set('trust proxy', 1);
 
 // Configure helmet to allow Crisp's domain to embed content
 app.use(helmet({
-    frameguard: {
-        action: 'ALLOW-FROM',
-        domain: 'https://app.crisp.chat' // Allow embedding from Crisp's domain
-    },
-    // If you encounter further issues related to CSP, you might need to adjust it.
-    // For now, only frameguard is targeted.
+    // Removed frameguard: { action: 'ALLOW-FROM', ... } as it's deprecated.
+    // Using frameAncestors in contentSecurityPolicy instead.
     contentSecurityPolicy: {
         directives: {
-            defaultSrc: ["'self'", 'https://app.crisp.chat'],
+            defaultSrc: ["'self'"],
             scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://app.crisp.chat'],
             styleSrc: ["'self'", "'unsafe-inline'", 'https://app.crisp.chat'],
             imgSrc: ["'self'", 'data:', 'https://app.crisp.chat'],
             connectSrc: ["'self'", 'https://app.crisp.chat'],
+            // THIS IS THE KEY CHANGE: Use frame-ancestors to allow Crisp to embed
             frameAncestors: ["'self'", 'https://app.crisp.chat'],
             // Add other directives as needed by your application
         }
